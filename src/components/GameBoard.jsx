@@ -3,6 +3,7 @@ import { io } from 'socket.io-client'
 import { createInitialState, processTurn, processUlt, resolveBeforeTurn, AT_DAMAGE, SP_DAMAGE } from '../../shared/combat'
 import { getAiMove } from '../logic/ai'
 import { CHARACTERS } from '../../shared/characters'
+import { generateNarrativeEntry } from '../logic/battleLog'
 
 const MOVES = ['AT', 'BL', 'SP']
 
@@ -218,87 +219,82 @@ function MourneAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
 
 // ─── Log ──────────────────────────────────────────────────────────────────────
 
-const BL_TIE_REASON = {
-  weight: 'lighter weight',
-  class:  'class advantage',
-  hp:     'lower HP',
-  coin:   'coin toss',
+// Colour by event key family — makes the log scannable at a glance
+function narrativeColor(key) {
+  if (!key) return '#bbb'
+  if (key.startsWith('AT_WINS'))          return '#7df'   // blue — attack wins
+  if (key.startsWith('SP_WINS'))          return '#c8f'   // violet — special wins
+  if (key.startsWith('BL_CHIP_GOOD_READ') || key.startsWith('BL_CHIP_BAD_READ'))
+                                          return '#f90'   // amber — read punish
+  if (key.startsWith('BL_CHIP'))          return '#aaa'   // grey — normal chip
+  if (key.startsWith('BL_TIE'))           return '#f90'   // amber — guard clash
+  if (key.startsWith('TIE'))              return '#aaa'   // grey — mutual
+  if (key.startsWith('ULT'))              return '#f90'   // gold — ultimate
+  if (key.startsWith('NIMBLE'))           return '#4f4'   // green — evasion
+  if (key.startsWith('CAIRAN'))           return '#4df'   // teal — Cairan dodge
+  return '#bbb'
 }
 
-function LogRow({ entry }) {
-  if (entry.isBLTie) {
-    const who    = entry.blTieWinner === 'p1' ? 'P1' : 'P2'
-    const loser  = entry.blTieWinner === 'p1' ? 'P2' : 'P1'
-    const reason = BL_TIE_REASON[entry.blTieReason] ?? entry.blTieReason
-    return (
-      <div style={{ marginBottom: 6, lineHeight: 1.5 }}>
-        <div>
-          <span style={{ color: '#888' }}>T{entry.turn}</span>
-          {'  P1 '}<span style={{ color: '#5af' }}>BL</span>
-          {'  P2 '}<span style={{ color: '#5af' }}>BL</span>
-          {'  '}<span style={{ color: '#aaa' }}>— CLASH</span>
-        </div>
-        <div style={{ paddingLeft: 16 }}>
-          <span style={{ color: '#f90', fontWeight: 'bold' }}>{who} wins by {reason}</span>
-          {'  '}
-          <span style={{ color: '#f55' }}>{loser} took {entry.blTieDamage}</span>
-        </div>
-      </div>
-    )
-  }
+function LogRow({ entry, p1Name, p2Name }) {
+  const narrative = generateNarrativeEntry(entry, p1Name ?? 'P1', p2Name ?? 'P2')
+  const color = narrativeColor(narrative.key)
 
-  if (entry.isUlt) {
-    const who = entry.ultUser === 'p1' ? 'P1' : 'P2'
-    return (
-      <div style={{ marginBottom: 6, lineHeight: 1.5, color: '#f90' }}>
-        <span style={{ color: '#888' }}>T{entry.turn}</span>
-        {`  ${who} ULT — ${entry.rawDamage} dmg`}
-        {` → `}<span style={{ color: '#f55' }}>{entry.actualDamage} dealt</span>
-        {entry.healAmount > 0 && <span style={{ color: '#4f4' }}>, +{entry.healAmount} HP</span>}
-      </div>
-    )
-  }
+  // Supplementary badges shown below the main sentence
+  const badges = []
 
+  if (entry.p1CritHit) badges.push(<span key="p1crit" style={{ color: '#f44', fontWeight: 'bold' }}>💥 {p1Name} CRIT</span>)
+  if (entry.p2CritHit) badges.push(<span key="p2crit" style={{ color: '#f44', fontWeight: 'bold' }}>💥 {p2Name} CRIT</span>)
+
+  if (entry.p1FlowActivated) badges.push(<span key="p1flow" style={{ color: '#f80', fontWeight: 'bold' }}>⚡ {p1Name} FLOW STATE</span>)
+  if (entry.p2FlowActivated) badges.push(<span key="p2flow" style={{ color: '#f80', fontWeight: 'bold' }}>⚡ {p2Name} FLOW STATE</span>)
+  if (entry.p1FlowBroken)    badges.push(<span key="p1flowb" style={{ color: '#666' }}>{p1Name} flow broken</span>)
+  if (entry.p2FlowBroken)    badges.push(<span key="p2flowb" style={{ color: '#666' }}>{p2Name} flow broken</span>)
+
+  // AT chain buff building
   const p1PlainAT = entry.p1Move === 'AT' && entry.p1Read === 'none'
   const p2PlainAT = entry.p2Move === 'AT' && entry.p2Read === 'none'
   const p1PlainSP = entry.p1Move === 'SP' && entry.p1Read === 'none'
   const p2PlainSP = entry.p2Move === 'SP' && entry.p2Read === 'none'
-
-  const details = []
-  if (entry.p1Damage > 0)
-    details.push(<span key="p1d" style={{ color: '#f55' }}>P1 took {entry.p1Damage}</span>)
-  if (entry.p2Damage > 0)
-    details.push(<span key="p2d" style={{ color: '#f55' }}>P2 took {entry.p2Damage}</span>)
-  if (entry.p1FlowActivated) details.push(<span key="p1flow" style={{ color: '#f80', fontWeight: 'bold' }}>P1 FLOW STATE</span>)
-  if (entry.p2FlowActivated) details.push(<span key="p2flow" style={{ color: '#f80', fontWeight: 'bold' }}>P2 FLOW STATE</span>)
-  if (entry.p1FlowBroken)    details.push(<span key="p1flowb" style={{ color: '#888' }}>P1 flow broken</span>)
-  if (entry.p2FlowBroken)    details.push(<span key="p2flowb" style={{ color: '#888' }}>P2 flow broken</span>)
-
   if (p1PlainAT && entry.p1AtChain > 2)
-    details.push(<span key="p1at" style={{ color: '#ff0' }}>P1 AT×{entry.p1AtChain}→{entry.p1AtDmgBuff}</span>)
+    badges.push(<span key="p1at" style={{ color: '#ff0' }}>🔥 {p1Name} AT×{entry.p1AtChain} → {entry.p1AtDmgBuff} dmg</span>)
   if (p2PlainAT && entry.p2AtChain > 2)
-    details.push(<span key="p2at" style={{ color: '#ff0' }}>P2 AT×{entry.p2AtChain}→{entry.p2AtDmgBuff}</span>)
+    badges.push(<span key="p2at" style={{ color: '#ff0' }}>🔥 {p2Name} AT×{entry.p2AtChain} → {entry.p2AtDmgBuff} dmg</span>)
   if (p1PlainSP && entry.p1SpChain >= 2 && entry.p1SpDmgBuff > 0)
-    details.push(<span key="p1sp" style={{ color: '#ff0' }}>P1 SP×{entry.p1SpChain}→{entry.p1SpDmgBuff}</span>)
+    badges.push(<span key="p1sp" style={{ color: '#ff0' }}>⚡ {p1Name} SP×{entry.p1SpChain} → {entry.p1SpDmgBuff} dmg</span>)
   if (p2PlainSP && entry.p2SpChain >= 2 && entry.p2SpDmgBuff > 0)
-    details.push(<span key="p2sp" style={{ color: '#ff0' }}>P2 SP×{entry.p2SpChain}→{entry.p2SpDmgBuff}</span>)
+    badges.push(<span key="p2sp" style={{ color: '#ff0' }}>⚡ {p2Name} SP×{entry.p2SpChain} → {entry.p2SpDmgBuff} dmg</span>)
 
   return (
-    <div style={{ marginBottom: 6, lineHeight: 1.5 }}>
-      <div>
-        <span style={{ color: '#888' }}>T{entry.turn}</span>
-        {'  P1 '}
-        <span style={{ color: '#5af' }}>{entry.p1Move}</span>
-        {entry.p1Read === 'good' && <span style={{ color: '#4f4' }}> good</span>}
-        {entry.p1Read === 'bad'  && <span style={{ color: '#f55' }}> bad</span>}
-        {'  P2 '}
-        <span style={{ color: '#5af' }}>{entry.p2Move}</span>
-        {entry.p2Read === 'good' && <span style={{ color: '#4f4' }}> good</span>}
-        {entry.p2Read === 'bad'  && <span style={{ color: '#f55' }}> bad</span>}
+    <div style={{ marginBottom: 10, lineHeight: 1.6, borderLeft: `2px solid ${color}22`, paddingLeft: 8 }}>
+      {/* Turn counter */}
+      <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 1 }}>
+        T{entry.turn}
+        {entry.p1Read !== 'none' && (
+          <span style={{ color: entry.p1Read === 'good' ? '#4f4' : '#f55', marginLeft: 6 }}>
+            {p1Name} read {entry.p1Read}
+          </span>
+        )}
+        {entry.p2Read !== 'none' && (
+          <span style={{ color: entry.p2Read === 'good' ? '#4f4' : '#f55', marginLeft: 6 }}>
+            {p2Name} read {entry.p2Read}
+          </span>
+        )}
       </div>
-      {details.length > 0 && (
-        <div style={{ paddingLeft: 16 }}>
-          {details.map((el, i) => [i > 0 ? '  ' : null, el])}
+
+      {/* Main narrative sentence */}
+      <div style={{ color, fontSize: 12 }}>
+        {narrative.explanation}
+      </div>
+
+      {/* Supplementary badges */}
+      {badges.length > 0 && (
+        <div style={{ paddingLeft: 4, fontSize: 11, marginTop: 2 }}>
+          {badges.map((badge, i) => (
+            <span key={i}>
+              {i > 0 && <span style={{ color: '#444', marginRight: 4 }}>·</span>}
+              {badge}
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -1306,7 +1302,7 @@ export default function GameBoard() {
       {state.log.length > 0 && (
         <div style={{ flex: 1, overflowY: 'auto', fontSize: 12 }}>
           {[...state.log].reverse().map(entry => (
-            <LogRow key={entry.turn} entry={entry} />
+            <LogRow key={entry.turn} entry={entry} p1Name={p1Name} p2Name={p2Name} />
           ))}
         </div>
       )}
