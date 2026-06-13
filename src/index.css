@@ -371,16 +371,52 @@ body {
     margin-right: 0 !important;
   }
 
-  /* Cycle lights row fills panel width */
+  /* Cycle lights row fills panel width, smaller circles */
   .cycle-row {
     width: 100% !important;
     margin-left: 0 !important;
+    gap: 4px !important;
+    margin-top: 4px !important;
   }
 
-  /* Move buttons — large tap targets */
+  /* Character-specific bars (evade, FF) fill panel */
+  .char-bar-wrap {
+    width: 100% !important;
+    margin-left: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Ability wheels fill panel */
+  .ability-wheels-row {
+    width: 100% !important;
+    margin-left: 0 !important;
+    gap: 3px !important;
+    margin-top: 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Move buttons — large tap targets with game styling */
+  .move-btn-row {
+    gap: 5px !important;
+    flex-wrap: wrap !important;
+    padding: 0 2px !important;
+  }
+
   .move-btn-row button {
     min-height: 44px !important;
     font-size: 12px !important;
-    padding: 4px 6px !important;
+    padding: 6px 8px !important;
+    flex: 1 1 auto !important;
+    min-width: 48px !important;
+    border-radius: 4px !important;
+    font-family: monospace !important;
+    letter-spacing: 0.5px !important;
+  }
+
+  /* Keep lit-class glows working on mobile */
+  .move-btn-row .lit-crimson,
+  .move-btn-row .lit-violet,
+  .move-btn-row .lit-gold {
+    flex: 1 1 auto !important;
   }
 }

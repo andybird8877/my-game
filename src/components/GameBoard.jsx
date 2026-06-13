@@ -1007,8 +1007,8 @@ export default function GameBoard() {
             </div>
           )}
           {/* Evade chance bar — Cairan P1 */}
-          {state.p1.hasDodge && !isMobile && (
-            <div style={{ marginTop: 5, width: 280 }}>
+          {state.p1.hasDodge && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 9, color: state.p1.nimbleUnlocked ? '#e03050' : '#444', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>EVADE</div>
                 <div style={{ flex: 1, height: 8, background: '#222', border: '1px solid #444', borderRadius: 2, overflow: 'hidden' }}>
@@ -1027,8 +1027,8 @@ export default function GameBoard() {
             </div>
           )}
           {/* Force Field accumulator */}
-          {state.p1.hasMourne && !isMobile && (
-            <div style={{ marginTop: 5, width: 280 }}>
+          {state.p1.hasMourne && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>FORCE FIELD</div>
                 <div style={{ flex: 1, height: 8, background: '#222', border: '1px solid #444', borderRadius: 2, overflow: 'hidden' }}>
@@ -1047,16 +1047,16 @@ export default function GameBoard() {
             </div>
           )}
           {/* Ability progress wheels — Cairan */}
-          {state.p1.hasDodge && !isMobile && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+          {state.p1.hasDodge && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
               <AbilityWheel count={state.p1.damageDealtCount}     unlocked={state.p1.keenEyeUnlocked}     label="Keen Eye"    tip={{ ...TIPS.keenEye, stat: `Current crit chance: ${Math.round((state.p1.keenEyeChance ?? 0.10) * 100)}%` }} />
               <AbilityWheel count={state.p1.successfulDodgeCount} unlocked={state.p1.nimbleUnlocked}      label="Nimble"      maxCount={2} tip={TIPS.nimble} />
               <AbilityWheel count={state.p1.critHitsDealt}        unlocked={state.p1.bloodletterUnlocked} label="Bloodletter" maxCount={2} tip={TIPS.bloodletter} />
             </div>
           )}
           {/* Ability progress wheels — Mourne */}
-          {state.p1.hasMourne && !isMobile && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+          {state.p1.hasMourne && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
               <MourneAbilityWheel count={state.p1.selfDamageTaken}    unlocked={state.p1.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p1.selfDamageTotal}    unlocked={state.p1.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
               <MourneAbilityWheel count={state.p1.goodToggledSpReads} unlocked={state.p1.leechUnlocked}    label="Leech"    maxCount={3}  tip={TIPS.leech} />
@@ -1150,8 +1150,8 @@ export default function GameBoard() {
             </div>
           )}
           {/* Evade chance bar — Cairan P2 */}
-          {state.p2.hasDodge && !isMobile && (
-            <div style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
+          {state.p2.hasDodge && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 10, color: state.p2.nimbleUnlocked ? '#e03050' : '#444', fontWeight: 'bold', minWidth: 36 }}>
                   {Math.round((state.p2.nimbleChance ?? 0) * 100)}%
@@ -1170,8 +1170,8 @@ export default function GameBoard() {
             </div>
           )}
           {/* Force Field accumulator — P2 */}
-          {state.p2.hasMourne && !isMobile && (
-            <div style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
+          {state.p2.hasMourne && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 10, color: (state.p2.forceFieldAccumulated ?? 0) > 0 ? '#b06cff' : '#444', fontWeight: 'bold', minWidth: 28 }}>
                   {state.p2.forceFieldAccumulated ?? 0}/10
@@ -1191,16 +1191,16 @@ export default function GameBoard() {
             </div>
           )}
           {/* Ability progress wheels — Cairan P2 */}
-          {state.p2.hasDodge && !isMobile && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+          {state.p2.hasDodge && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
               <AbilityWheel count={state.p2.damageDealtCount}     unlocked={state.p2.keenEyeUnlocked}     label="Keen Eye"    tip={{ ...TIPS.keenEye, stat: `Current crit chance: ${Math.round((state.p2.keenEyeChance ?? 0.10) * 100)}%` }} />
               <AbilityWheel count={state.p2.successfulDodgeCount} unlocked={state.p2.nimbleUnlocked}      label="Nimble"      maxCount={2} tip={TIPS.nimble} />
               <AbilityWheel count={state.p2.critHitsDealt}        unlocked={state.p2.bloodletterUnlocked} label="Bloodletter" maxCount={2} tip={TIPS.bloodletter} />
             </div>
           )}
           {/* Ability progress wheels — Mourne P2 */}
-          {state.p2.hasMourne && !isMobile && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+          {state.p2.hasMourne && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
               <MourneAbilityWheel count={state.p2.selfDamageTaken}    unlocked={state.p2.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p2.selfDamageTotal}    unlocked={state.p2.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
               <MourneAbilityWheel count={state.p2.goodToggledSpReads} unlocked={state.p2.leechUnlocked}    label="Leech"    maxCount={3}  tip={TIPS.leech} />
