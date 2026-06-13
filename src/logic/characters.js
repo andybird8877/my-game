@@ -20,12 +20,14 @@ for (const affinity of affinities) {
     for (const cls of classes) {
       const isCairan = affinity === 'good'  && weight === 'light'  && cls === 'warrior'
       const isMourne = affinity === 'evil'  && weight === 'heavy'  && cls === 'mage'
+      const isVael   = affinity === 'good'  && weight === 'light'  && cls === 'mage'
       CHARACTERS.push({
         id:       _id++,
-        name:     isCairan ? 'Cairan Vex' : isMourne ? 'Mourne' : `${cap(affinity)} ${cap(weight)} ${cap(cls)}`,
-        portrait:  isCairan ? '/portraits/cairan-vex.png' : isMourne ? '/portraits/mourne.png' : null,
+        name:     isCairan ? 'Cairan Vex' : isMourne ? 'Mourne' : isVael ? 'Vael Solace' : `${cap(affinity)} ${cap(weight)} ${cap(cls)}`,
+        portrait:  isCairan ? '/portraits/cairan-vex.png' : isMourne ? '/portraits/mourne.png' : isVael ? '/portraits/vael-solace.png' : null,
         hasDodge:  isCairan,
         hasMourne: isMourne,
+        hasVael:   isVael,
         affinity,
         weight,
         class:    cls,

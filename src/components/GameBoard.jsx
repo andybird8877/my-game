@@ -1220,7 +1220,7 @@ export default function GameBoard() {
           <button
             key={move}
             onClick={() => isOnline ? handleOnlineMove(move) : handleMove(move)}
-            disabled={gameOver || animating || ultAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+            disabled={gameOver || animating || ultAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move}
             className={litClass(myPlayer, move)}
           >
             {move === 'BL' ? (Array.isArray(blLabel(myPlayer)) ? blLabel(myPlayer).join(' ') : blLabel(myPlayer)) : move}

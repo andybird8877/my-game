@@ -92,7 +92,7 @@ export function calculateDamage({ outcome, loser, winner, p1Move, p2Move, p1Read
 export function createInitialState(p1Char = null, p2Char = null) {
   const p1Hp = p1Char?.hp ?? 300
   const p2Hp = p2Char?.hp ?? 300
-  const makePlayer = (hp, baseAtDamage, baseSpDamage, critChance, hasDodge, hasMourne, weight, cls) => ({
+  const makePlayer = (hp, baseAtDamage, baseSpDamage, critChance, hasDodge, hasMourne, hasVael, weight, cls) => ({
     hp, maxHp: hp, baseAtDamage, baseSpDamage, critChance,
     weight: weight ?? 'medium',
     class:  cls    ?? 'warrior',
@@ -117,10 +117,14 @@ export function createInitialState(p1Char = null, p2Char = null) {
     overloadUnlocked: false,
     leechUnlocked: false,
     overloadActive: false,
+    // Vael Solace ability trackers (all players carry these; only used when hasVael)
+    hasVael: !!hasVael,
+    disabledMove: null,
+    vaelDisablesLanded: 0,
   })
   return {
-    p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.weight, p1Char?.class),
-    p2: makePlayer(p2Hp, p2Char?.atDamage ?? AT_DAMAGE, p2Char?.spDamage ?? SP_DAMAGE, p2Char?.critChance ?? 0, p2Char?.hasDodge, p2Char?.hasMourne, p2Char?.weight, p2Char?.class),
+    p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.weight, p1Char?.class),
+    p2: makePlayer(p2Hp, p2Char?.atDamage ?? AT_DAMAGE, p2Char?.spDamage ?? SP_DAMAGE, p2Char?.critChance ?? 0, p2Char?.hasDodge, p2Char?.hasMourne, p2Char?.hasVael, p2Char?.weight, p2Char?.class),
     p1Character: p1Char,
     p2Character: p2Char,
     lastTurn: null,
@@ -706,6 +710,25 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     totalDealt:  finalP1Damage,
   } : null
 
+  // ── Vael Solace: SP disable mechanic ──────────────────────────────────────
+  // Clears any existing disabledMove (it was active for this turn).
+  // If Vael's SP beats the opponent's BL this turn, randomly disable one of
+  // the opponent's moves for their next turn.
+  const VAEL_MOVES = ['AT', 'BL', 'SP']
+  let p1NewDisabledMove = null
+  let p2NewDisabledMove = null
+  let p1VaelDisablesLanded = newP1.vaelDisablesLanded ?? 0
+  let p2VaelDisablesLanded = newP2.vaelDisablesLanded ?? 0
+
+  if (newP1.hasVael && p1Move === 'SP' && p2Move === 'BL') {
+    p2NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
+    p1VaelDisablesLanded++
+  }
+  if (newP2.hasVael && p2Move === 'SP' && p1Move === 'BL') {
+    p1NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
+    p2VaelDisablesLanded++
+  }
+
   // ── Log entry ─────────────────────────────────────────────────────────────
   const turn = gameState.log.length + 1
   const entry = {
@@ -756,12 +779,16 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       forceFieldAccumulated: p1ForceFieldAccumulated,
       ffTotalAbsorbed: p1FfTotalAbsorbed,
       pendingLifesteal: p1PendingLifesteal,
+      disabledMove: p1NewDisabledMove,
+      vaelDisablesLanded: p1VaelDisablesLanded,
     },
     p2: {
       ...newP2, hp: p2Hp, bleeds: p2Bleeds, ...dodgeP2, ...p2AbilityUpdates, ...p2MourneUpdates,
       forceFieldAccumulated: p2ForceFieldAccumulated,
       ffTotalAbsorbed: p2FfTotalAbsorbed,
       pendingLifesteal: p2PendingLifesteal,
+      disabledMove: p2NewDisabledMove,
+      vaelDisablesLanded: p2VaelDisablesLanded,
     },
     lastTurn: entry,
     log: [...gameState.log, entry],
