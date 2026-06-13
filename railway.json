@@ -1,1 +1,9 @@
-{"build": {"builder": "NIXPACKS", "buildCommand": "npm install && npm run build"}, "deploy": {"startCommand": "npm run start"}}
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install && npm run build"
+  },
+  "deploy": {
+    "startCommand": "node server/server.js"
+  }
+}
