@@ -309,11 +309,11 @@ function LogRow({ entry }) {
 
 const MOVE_EMOJI = { AT: '⚔️', BL: '🛡️', SP: '✨' }
 
-function HpBar({ hp, maxHp, alignRight = false }) {
+function HpBar({ hp, maxHp, alignRight = false, className }) {
   const pct = Math.max(0, hp / maxHp)
   const hue = Math.max(0, (pct - 0.1) / 0.9 * 120)
   return (
-    <div style={{ width: 280, height: 7, backgroundColor: '#222', marginBottom: 6, marginLeft: alignRight ? 'auto' : 0 }}>
+    <div className={['hp-bar', className].filter(Boolean).join(' ')} style={{ width: 280, height: 7, backgroundColor: '#222', marginBottom: 6, marginLeft: alignRight ? 'auto' : 0 }}>
       <div style={{
         width: `${pct * 100}%`,
         height: '100%',
@@ -363,6 +363,14 @@ export default function GameBoard() {
   const socketRef       = useRef(null)
   const pendingStateRef = useRef(null)
   const currentStateRef = useRef(null)
+
+  const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 800)
+  useEffect(() => {
+    const handle = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handle)
+    return () => window.removeEventListener('resize', handle)
+  }, [])
+  const isMobile = windowWidth < 600
 
   useEffect(() => { currentStateRef.current = state }, [state])
 
@@ -915,17 +923,23 @@ export default function GameBoard() {
     {activeEffect?.type === 'announce' && (
       <div key={activeEffect.key} className="unlock-text">{activeEffect.message}</div>
     )}
-    <div style={{ maxWidth: 620, margin: '40px auto', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 24 }}>
+    <div className="game-container" style={{ maxWidth: 620, margin: '40px auto', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
+      <div className="panels-row" style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 24 }}>
 
         {/* ── P1 ── */}
-        <div>
-          <div className={collapseAnimating ? 'collapse-charge' : ultAnimating ? 'ult-charge' : animating ? 'p1-fight' : undefined}
+        <div className="panel panel-p1">
+          {isMobile && (
+            <div className="panel-stats-mobile">
+              <span style={{ color: p1Accent, fontWeight: 'bold', marginRight: 4 }}>{p1Name}</span>
+              <span style={{ color: '#aaa' }}>HP:{dispP1Hp} AT:{Math.max(state.p1.atDmgBuff, state.p1.baseAtDamage)} SP:{state.p1.hasMourne && state.p1.overloadActive ? Math.floor(Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage) * 1.75) : Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage)}</span>
+            </div>
+          )}
+          <div className={['portrait-wrap', collapseAnimating ? 'collapse-charge' : ultAnimating ? 'ult-charge' : animating ? 'p1-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, display: 'inline-block' }}>
             <img
               src={state.p1Character?.portrait ?? '/src/img/tyrone.png'}
               alt="P1"
-              className={state.p1.flowState ? 'flow-portrait' : undefined}
+              className={['portrait-img', state.p1.flowState ? 'flow-portrait' : undefined].filter(Boolean).join(' ')}
               style={{ width: 280, height: 280, objectFit: 'cover', border: '2px solid #555', display: 'block', transition: 'transform 0.9s ease, filter 0.9s ease', transform: deathEffectsReady && loser === 'p1' ? 'rotate(180deg)' : undefined, filter: deathEffectsReady && loser === 'p1' ? 'grayscale(1)' : undefined }}
             />
             {animating && lastMoves.p1 && (
@@ -951,18 +965,18 @@ export default function GameBoard() {
             )}
           </div>
           <HpBar hp={dispP1Hp} maxHp={state.p1.maxHp} />
-          {state.p1.flowState && (
+          {!isMobile && state.p1.flowState && (
             <div style={{ fontSize: 9, color: '#f80', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>FLOW</div>
           )}
-          {state.p1.overloadActive && (
+          {!isMobile && state.p1.overloadActive && (
             <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>OVERLOAD</div>
           )}
-          <div style={{ color: p1Accent, fontWeight: 'bold', fontSize: 12 }}>{p1Name}</div>
-          <div>HP: {dispP1Hp}</div>
-          <div style={{ color: '#aaa', fontSize: 11 }}>
+          {!isMobile && <div style={{ color: p1Accent, fontWeight: 'bold', fontSize: 12 }}>{p1Name}</div>}
+          {!isMobile && <div>HP: {dispP1Hp}</div>}
+          {!isMobile && <div style={{ color: '#aaa', fontSize: 11 }}>
             AT: {Math.max(state.p1.atDmgBuff, state.p1.baseAtDamage)} | SP: {state.p1.hasMourne && state.p1.overloadActive ? Math.floor(Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage) * 1.75) : Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage)}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 6, width: 280 }}>
+          </div>}
+          <div className="cycle-row" style={{ display: 'flex', gap: 8, marginTop: 6, width: 280 }}>
             {['AT', 'BL', 'SP'].map(move => (
               <TooltipWrap key={move} tip={cycleTip(move, state.p1)} unlocked={true}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
@@ -993,7 +1007,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Evade chance bar — Cairan P1 */}
-          {state.p1.hasDodge && (
+          {state.p1.hasDodge && !isMobile && (
             <div style={{ marginTop: 5, width: 280 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 9, color: state.p1.nimbleUnlocked ? '#e03050' : '#444', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>EVADE</div>
@@ -1013,7 +1027,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Force Field accumulator */}
-          {state.p1.hasMourne && (
+          {state.p1.hasMourne && !isMobile && (
             <div style={{ marginTop: 5, width: 280 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>FORCE FIELD</div>
@@ -1033,7 +1047,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Ability progress wheels — Cairan */}
-          {state.p1.hasDodge && (
+          {state.p1.hasDodge && !isMobile && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
               <AbilityWheel count={state.p1.damageDealtCount}     unlocked={state.p1.keenEyeUnlocked}     label="Keen Eye"    tip={{ ...TIPS.keenEye, stat: `Current crit chance: ${Math.round((state.p1.keenEyeChance ?? 0.10) * 100)}%` }} />
               <AbilityWheel count={state.p1.successfulDodgeCount} unlocked={state.p1.nimbleUnlocked}      label="Nimble"      maxCount={2} tip={TIPS.nimble} />
@@ -1041,7 +1055,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Ability progress wheels — Mourne */}
-          {state.p1.hasMourne && (
+          {state.p1.hasMourne && !isMobile && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
               <MourneAbilityWheel count={state.p1.selfDamageTaken}    unlocked={state.p1.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p1.selfDamageTotal}    unlocked={state.p1.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
@@ -1056,19 +1070,25 @@ export default function GameBoard() {
         </div>
 
         {/* ── P2 ── */}
-        <div style={{ textAlign: 'right' }}>
-          {state.p2.flowState && (
+        <div className="panel panel-p2" style={{ textAlign: 'right' }}>
+          {isMobile && (
+            <div className="panel-stats-mobile" style={{ textAlign: 'right' }}>
+              <span style={{ color: p2Accent, fontWeight: 'bold', marginRight: 4 }}>{p2Name}</span>
+              <span style={{ color: '#aaa' }}>HP:{dispP2Hp} AT:{Math.max(state.p2.atDmgBuff, state.p2.baseAtDamage)} SP:{state.p2.hasMourne && state.p2.overloadActive ? Math.floor(Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage) * 1.75) : Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage)}</span>
+            </div>
+          )}
+          {!isMobile && state.p2.flowState && (
             <div style={{ fontSize: 9, color: '#f80', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>FLOW</div>
           )}
-          {state.p2.overloadActive && (
+          {!isMobile && state.p2.overloadActive && (
             <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>OVERLOAD</div>
           )}
-          <div className={collapseAnimating ? 'collapse-hit' : ultAnimating ? 'ult-hit' : animating ? 'p2-fight' : undefined}
+          <div className={['portrait-wrap', collapseAnimating ? 'collapse-hit' : ultAnimating ? 'ult-hit' : animating ? 'p2-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, marginLeft: 'auto', display: 'block' }}>
             <img
               src={state.p2Character?.portrait ?? '/src/img/stotch.png'}
               alt="P2"
-              className={state.p2.flowState ? 'flow-portrait' : undefined}
+              className={['portrait-img', state.p2.flowState ? 'flow-portrait' : undefined].filter(Boolean).join(' ')}
               style={{ width: 280, height: 280, objectFit: 'cover', border: '2px solid #555', display: 'block', transition: 'transform 0.9s ease, filter 0.9s ease', transform: deathEffectsReady && loser === 'p2' ? 'scaleX(-1) rotate(180deg)' : 'scaleX(-1)', filter: deathEffectsReady && loser === 'p2' ? 'grayscale(1)' : undefined }}
             />
             {animating && lastMoves.p2 && (
@@ -1094,12 +1114,12 @@ export default function GameBoard() {
             )}
           </div>
           <HpBar hp={dispP2Hp} maxHp={state.p2.maxHp} alignRight />
-          <div style={{ color: p2Accent, fontWeight: 'bold', fontSize: 12 }}>{p2Name}</div>
-          <div>HP: {dispP2Hp}</div>
-          <div style={{ color: '#aaa', fontSize: 11 }}>
+          {!isMobile && <div style={{ color: p2Accent, fontWeight: 'bold', fontSize: 12 }}>{p2Name}</div>}
+          {!isMobile && <div>HP: {dispP2Hp}</div>}
+          {!isMobile && <div style={{ color: '#aaa', fontSize: 11 }}>
             AT: {Math.max(state.p2.atDmgBuff, state.p2.baseAtDamage)} | SP: {state.p2.hasMourne && state.p2.overloadActive ? Math.floor(Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage) * 1.75) : Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage)}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 6, width: 280, marginLeft: 'auto' }}>
+          </div>}
+          <div className="cycle-row" style={{ display: 'flex', gap: 8, marginTop: 6, width: 280, marginLeft: 'auto' }}>
             {['AT', 'BL', 'SP'].map(move => (
               <TooltipWrap key={move} tip={cycleTip(move, state.p2)} unlocked={true}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
@@ -1130,7 +1150,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Evade chance bar — Cairan P2 */}
-          {state.p2.hasDodge && (
+          {state.p2.hasDodge && !isMobile && (
             <div style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 10, color: state.p2.nimbleUnlocked ? '#e03050' : '#444', fontWeight: 'bold', minWidth: 36 }}>
@@ -1150,7 +1170,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Force Field accumulator — P2 */}
-          {state.p2.hasMourne && (
+          {state.p2.hasMourne && !isMobile && (
             <div style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ fontSize: 10, color: (state.p2.forceFieldAccumulated ?? 0) > 0 ? '#b06cff' : '#444', fontWeight: 'bold', minWidth: 28 }}>
@@ -1171,7 +1191,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Ability progress wheels — Cairan P2 */}
-          {state.p2.hasDodge && (
+          {state.p2.hasDodge && !isMobile && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
               <AbilityWheel count={state.p2.damageDealtCount}     unlocked={state.p2.keenEyeUnlocked}     label="Keen Eye"    tip={{ ...TIPS.keenEye, stat: `Current crit chance: ${Math.round((state.p2.keenEyeChance ?? 0.10) * 100)}%` }} />
               <AbilityWheel count={state.p2.successfulDodgeCount} unlocked={state.p2.nimbleUnlocked}      label="Nimble"      maxCount={2} tip={TIPS.nimble} />
@@ -1179,7 +1199,7 @@ export default function GameBoard() {
             </div>
           )}
           {/* Ability progress wheels — Mourne P2 */}
-          {state.p2.hasMourne && (
+          {state.p2.hasMourne && !isMobile && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
               <MourneAbilityWheel count={state.p2.selfDamageTaken}    unlocked={state.p2.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p2.selfDamageTotal}    unlocked={state.p2.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
@@ -1199,7 +1219,7 @@ export default function GameBoard() {
         {activeEffect && activeEffect.type !== 'announce' && renderEffectBanner(activeEffect)}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+      <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         {MOVES.map(move => (
           <button
             key={move}
