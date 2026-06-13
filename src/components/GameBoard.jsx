@@ -235,8 +235,8 @@ function narrativeColor(key) {
   return '#bbb'
 }
 
-function LogRow({ entry, p1Name, p2Name }) {
-  const narrative = generateNarrativeEntry(entry, p1Name ?? 'P1', p2Name ?? 'P2')
+function LogRow({ entry, p1Name, p2Name, p1Char, p2Char }) {
+  const narrative = generateNarrativeEntry(entry, p1Name ?? 'P1', p2Name ?? 'P2', p1Char, p2Char)
   const color = narrativeColor(narrative.key)
 
   // Supplementary badges shown below the main sentence
@@ -1302,7 +1302,7 @@ export default function GameBoard() {
       {state.log.length > 0 && (
         <div style={{ flex: 1, overflowY: 'auto', fontSize: 12 }}>
           {[...state.log].reverse().map(entry => (
-            <LogRow key={entry.turn} entry={entry} p1Name={p1Name} p2Name={p2Name} />
+            <LogRow key={entry.turn} entry={entry} p1Name={p1Name} p2Name={p2Name} p1Char={state.p1Character} p2Char={state.p2Character} />
           ))}
         </div>
       )}

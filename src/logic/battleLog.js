@@ -2,7 +2,11 @@
  * battleLog.js — Narrative battle log framework for CounterCycle
  *
  * Primary export:
- *   generateNarrativeEntry(entry, p1Name, p2Name) → NarrativeEntry
+ *   generateNarrativeEntry(entry, p1Name, p2Name, p1Char?, p2Char?) → NarrativeEntry
+ *
+ * Pass p1Char / p2Char (the character objects from CHARACTERS) so the framework
+ * can distinguish Cairan's Dodge from Mourne's Force Field and other ability-
+ * specific scenarios. If omitted, generic fallback text is used.
  *
  * NarrativeEntry = {
  *   actor:       string   — who initiated the action
@@ -16,8 +20,9 @@
  * Extending:
  *   - Add a new key to EVENT_TEMPLATES below with an array of template objects.
  *   - OR call registerEventTemplates(key, templates) from outside this module.
- *   - Call classifyEntry(entry, p1Name, p2Name) to get { key, ctx, turn } if you
- *     want to build custom rendering without using the default templates.
+ *   - Call classifyEntry(entry, p1Name, p2Name, p1Char, p2Char) to get
+ *     { key, ctx, turn } if you want to build custom rendering without using
+ *     the default templates.
  */
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -302,6 +307,27 @@ const EVENT_TEMPLATES = {
     },
   ],
 
+  // ── Mourne Force Field absorbs chip ──────────────────────────────────────
+
+  MOURNE_FF_ABSORB: [
+    {
+      actor:       '{actor}',
+      action:      'surges into the Force Field',
+      reactor:     '{reactor}',
+      reaction:    'barrier drinks in the impact',
+      result:      'chip absorbed into FF',
+      explanation: '{actor}\'s strike hits {reactor}\'s Force Field — the energy is absorbed into the barrier rather than dealing HP damage.',
+    },
+    {
+      actor:       '{reactor}',
+      action:      'holds the Force Field as {actor} attacks',
+      reactor:     '{actor}',
+      reaction:    'impact funnelled into the accumulator',
+      result:      'FF charges',
+      explanation: '{actor} attacks into {reactor}\'s Force Field. No HP damage — the blow feeds the accumulator.',
+    },
+  ],
+
   // ── Cairan dodge (BL absorbs chip — streak 0→1) ───────────────────────────
 
   CAIRAN_DODGE_ABSORB: [
@@ -462,9 +488,11 @@ const EVENT_TEMPLATES = {
  * @param {object} entry   - Log entry from gameState.log
  * @param {string} p1Name  - Display name of player 1
  * @param {string} p2Name  - Display name of player 2
+ * @param {object} [p1Char] - Player 1 character object (from CHARACTERS)
+ * @param {object} [p2Char] - Player 2 character object (from CHARACTERS)
  * @returns {{ key: string, ctx: object, turn: number }}
  */
-export function classifyEntry(entry, p1Name, p2Name) {
+export function classifyEntry(entry, p1Name, p2Name, p1Char, p2Char) {
   const turn = entry.turn ?? 0
 
   // ── Ultimates ────────────────────────────────────────────────────────────
@@ -518,6 +546,11 @@ export function classifyEntry(entry, p1Name, p2Name) {
     const attackerName = attackerIsP1 ? p1Name : p2Name
     const blockerName  = attackerIsP1 ? p2Name : p1Name
 
+    // Character ability flags for the blocker
+    const blockerChar   = attackerIsP1 ? p2Char : p1Char
+    const blockerHasDodge  = !!(blockerChar?.hasDodge)
+    const blockerHasMourne = !!(blockerChar?.hasMourne)
+
     const attackerRead = attackerIsP1 ? entry.p1Read : entry.p2Read
     const blockerRead  = attackerIsP1 ? entry.p2Read : entry.p1Read
 
@@ -526,11 +559,9 @@ export function classifyEntry(entry, p1Name, p2Name) {
     const blockerTookDamage  = attackerIsP1 ? (entry.p2Damage ?? 0) : (entry.p1Damage ?? 0)
 
     // Nimble — passive evasion can fire for either player
-    const attackerNimble = attackerIsP1 ? entry.p1NimbleTriggered : entry.p2NimbleTriggered
-    const blockerNimble  = attackerIsP1 ? entry.p2NimbleTriggered : entry.p1NimbleTriggered
+    const blockerNimble = attackerIsP1 ? entry.p2NimbleTriggered : entry.p1NimbleTriggered
 
     if (blockerNimble) {
-      // Blocker's Nimble evades the chip that would have hit them
       return {
         key: 'NIMBLE_DODGE',
         ctx: { p1Name, p2Name, evader: blockerName, other: attackerName, damage: 0 },
@@ -538,17 +569,13 @@ export function classifyEntry(entry, p1Name, p2Name) {
       }
     }
 
-    // Cairan dodge (BL specifically, identified by dodgeStreak data in entry)
-    // We detect counter vs absorb by whether the ATTACKER took reverse damage
-    // and no good-read flag is set (to distinguish from a regular read punish).
-    // Counter: attacker took damage and blocker read is 'none' (it's a dodge counter)
-    if (attackerTookDamage > 0 && blockerRead === 'none') {
-      // This is a Cairan dodge counter (dodgeStreak reversal)
+    // Cairan dodge counter — attacker took reverse damage, no read (dodgeStreak reversal)
+    if (blockerHasDodge && attackerTookDamage > 0 && blockerRead === 'none') {
       return {
         key: 'CAIRAN_DODGE_COUNTER',
         ctx: {
           p1Name, p2Name,
-          actor:   blockerName,   // Cairan = actor (counter-attacker)
+          actor:   blockerName,
           reactor: attackerName,
           damage:  attackerTookDamage,
           p1Damage: entry.p1Damage ?? 0,
@@ -558,13 +585,13 @@ export function classifyEntry(entry, p1Name, p2Name) {
       }
     }
 
-    // Blocker had a good read → punish on the attacker
+    // Blocker good read → punishes the attacker
     if (blockerRead === 'good') {
       return {
         key: 'BL_CHIP_GOOD_READ',
         ctx: {
           p1Name, p2Name,
-          actor:   blockerName,    // blocker is protagonist here
+          actor:   blockerName,
           reactor: attackerName,
           damage:  attackerTookDamage,
           p1Damage: entry.p1Damage ?? 0,
@@ -574,7 +601,7 @@ export function classifyEntry(entry, p1Name, p2Name) {
       }
     }
 
-    // Attacker had a bad read → extra punish on the attacker
+    // Attacker bad read → extra punish on the attacker
     if (attackerRead === 'bad' && attackerTookDamage > 0) {
       return {
         key: 'BL_CHIP_BAD_READ',
@@ -590,15 +617,34 @@ export function classifyEntry(entry, p1Name, p2Name) {
       }
     }
 
-    // Cairan first dodge — blocker takes 0 chip (absorbed)
+    // Both damages zero — absorption event. Distinguish by character ability.
     if (blockerTookDamage === 0 && attackerTookDamage === 0) {
+      if (blockerHasMourne) {
+        // Mourne's Force Field absorbed the chip into the accumulator
+        return {
+          key: 'MOURNE_FF_ABSORB',
+          ctx: { p1Name, p2Name, actor: attackerName, reactor: blockerName, damage: 0 },
+          turn,
+        }
+      }
+      if (blockerHasDodge) {
+        // Cairan's first dodge — absorbs the chip cleanly
+        return {
+          key: 'CAIRAN_DODGE_ABSORB',
+          ctx: { p1Name, p2Name, actor: blockerName, reactor: attackerName, damage: 0 },
+          turn,
+        }
+      }
+      // Lit BL negated chip — treat as a strong block
       return {
-        key: 'CAIRAN_DODGE_ABSORB',
+        key: 'BL_CHIP',
         ctx: {
           p1Name, p2Name,
-          actor:   blockerName,
-          reactor: attackerName,
+          actor:   attackerName,
+          reactor: blockerName,
           damage:  0,
+          p1Damage: 0,
+          p2Damage: 0,
         },
         turn,
       }
@@ -680,13 +726,15 @@ export function classifyEntry(entry, p1Name, p2Name) {
 /**
  * Generate a structured narrative entry for a combat log event.
  *
- * @param {object} entry   - Log entry from gameState.log
- * @param {string} p1Name  - Display name of player 1
- * @param {string} p2Name  - Display name of player 2
+ * @param {object} entry    - Log entry from gameState.log
+ * @param {string} p1Name   - Display name of player 1
+ * @param {string} p2Name   - Display name of player 2
+ * @param {object} [p1Char] - Player 1 character object (from CHARACTERS)
+ * @param {object} [p2Char] - Player 2 character object (from CHARACTERS)
  * @returns {NarrativeEntry}
  */
-export function generateNarrativeEntry(entry, p1Name, p2Name) {
-  const { key, ctx, turn } = classifyEntry(entry, p1Name, p2Name)
+export function generateNarrativeEntry(entry, p1Name, p2Name, p1Char, p2Char) {
+  const { key, ctx, turn } = classifyEntry(entry, p1Name, p2Name, p1Char, p2Char)
 
   const templates = EVENT_TEMPLATES[key]
   if (!templates || templates.length === 0) {
