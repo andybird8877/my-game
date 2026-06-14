@@ -335,7 +335,7 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
-  background: #000 url('/src/img/background1.jpeg') center center / cover no-repeat fixed;
+  background: #000 url('/backgrounds/dark-fantasy-scene.jpg') center center / cover no-repeat fixed;
   color: #fff;
 }
 

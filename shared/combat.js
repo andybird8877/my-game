@@ -215,6 +215,31 @@ function resolveBLTie(p1, p2, p1AtDmg, p2AtDmg) {
   return { winner, loser, reason, damage }
 }
 
+// ── Shared ULT damage calculator (used by both execution and live preview) ───
+export function calcUltDamage(player) {
+  if (player.hasMourne) {
+    const ff     = player.ffTotalAbsorbed  ?? 0  // total FF absorbed over whole match
+    const self   = player.selfDamageTotal  ?? 0
+    const raw    = ff + self
+    const actual = player.overloadActive ? Math.floor(raw * 1.75) : raw
+    return { raw, actual }
+  }
+  if (player.hasVael) {
+    // MIND BLAST: disables × Good Clashes (non-toggled wins) accumulated this match
+    const disables = player.vaelDisablesLanded  ?? 0
+    const clashes  = player.vaelNormalGoodReads ?? 0
+    const actual   = disables * clashes
+    return { raw: actual, actual }
+  }
+  // Cairan / default: ASSASSINATE = 2×AT + 2×SP
+  const baseAt = player.baseAtDamage ?? AT_DAMAGE
+  const baseSp = player.baseSpDamage ?? SP_DAMAGE
+  const atDmg  = Math.max(player.atDmgBuff ?? 0, baseAt)
+  const spDmg  = Math.max(player.spDmgBuff ?? 0, baseSp)
+  const actual = atDmg * 2 + spDmg * 2
+  return { raw: actual, actual }
+}
+
 export function processCollapse(gameState, ultUser) {
   const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
   const attacker = gameState[ultUser]
@@ -222,8 +247,7 @@ export function processCollapse(gameState, ultUser) {
 
   const ffAbsorbed  = attacker.ffTotalAbsorbed ?? 0
   const selfDmg     = attacker.selfDamageTotal ?? 0
-  const rawDamage   = ffAbsorbed + selfDmg
-  const actualDamage = attacker.overloadActive ? Math.floor(rawDamage * 1.75) : rawDamage
+  const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
 
   const newDefenderHp = Math.max(0, defender.hp - actualDamage)
   const healAmount    = Math.min(attacker.maxHp - attacker.hp, actualDamage)
@@ -267,11 +291,10 @@ function processVaelUlt(gameState, ultUser) {
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
 
-  // Damage = vaelDisablesLanded × vaelToggledGoodReads; vaelDisablesLanded resets to 0 after use.
-  const disables      = attacker.vaelDisablesLanded    ?? 0
-  const toggledReads  = attacker.vaelToggledGoodReads  ?? 0
-  const rawDamage     = disables * toggledReads
-  const actualDamage  = rawDamage
+  // Damage = vaelDisablesLanded × vaelNormalGoodReads (Good Clashes); resets disables after use.
+  const disables = attacker.vaelDisablesLanded  ?? 0
+  const clashes  = attacker.vaelNormalGoodReads ?? 0
+  const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
 
   const newDefenderHp = Math.max(0, defender.hp - actualDamage)
 
@@ -284,7 +307,7 @@ function processVaelUlt(gameState, ultUser) {
     actualDamage,
     healAmount: 0,
     vaelDisablesLanded: disables,
-    vaelToggledGoodReads: toggledReads,
+    vaelGoodClashes: clashes,
     p1Hp: ultUser === 'p1' ? attacker.hp : newDefenderHp,
     p2Hp: ultUser === 'p2' ? attacker.hp : newDefenderHp,
   }
@@ -314,12 +337,7 @@ export function processUlt(gameState, ultUser) {
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
 
-  const baseAt    = attacker.baseAtDamage ?? AT_DAMAGE
-  const baseSp    = attacker.baseSpDamage ?? SP_DAMAGE
-  const atDmg     = Math.max(attacker.atDmgBuff, baseAt)
-  const spDmg     = Math.max(attacker.spDmgBuff, baseSp)
-  const rawDamage = atDmg * 2 + spDmg * 2
-  const actualDamage = rawDamage
+  const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
 
   const bothUlting   = attacker.ultimateReady && defender.ultimateReady
   const healAmount   = bothUlting ? 0 : Math.floor(actualDamage * 0.5)
@@ -486,9 +504,10 @@ export function resolveBeforeTurn(gameState) {
   for (const playerKey of ['p1', 'p2']) {
     const player = state[playerKey]
     if (!player.vaelRegenUnlocked || player.hp <= 0) continue
-    const maxHp   = player.maxHp ?? 1
-    const hpPct   = Math.min(95, Math.max(5, (player.hp / maxHp) * 100))
-    const healPct = 12.5 - (hpPct - 5) * (11.5 / 90)
+    const maxHp = player.maxHp ?? 1
+    if (player.hp >= maxHp * 0.5) continue  // no regen at or above 50% HP
+    // Below 50%: scales from 12.5% heal at 0 HP → 0% at 50% HP
+    const healPct = 12.5 * (1 - player.hp / (maxHp * 0.5))
     const heal    = Math.floor((healPct / 100) * maxHp)
     if (heal <= 0) continue
     const newHp = Math.min(maxHp, player.hp + heal)
@@ -734,7 +753,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     let keenEyeChance = player.keenEyeChance ?? 0.10
     let nimbleChance  = player.nimbleChance  ?? 0
     if (cleanWin) {
-      keenEyeChance = Math.min(0.25, keenEyeChance + 0.01)
+      keenEyeChance = Math.min(0.35, keenEyeChance + 0.02)
     }
     if (goodRead) {
       nimbleChance = Math.min(0.30, nimbleChance + 0.02)
@@ -847,7 +866,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   // vaelRegenUnlocked: permanently true once counter reaches 3.
   // Once unlocked, heals Vael every turn after damage — amount scales inversely
   // with current HP% (more effective when low, minimal when near full).
-  // Formula: clamp HP% to [5,95], healPct = 12.5 − (clampedHPPct − 5)×(11.5/90),
+  // Formula: no heal at or above 50% HP; below 50%: healPct = 12.5 × (1 − hp/(maxHp×0.5)),
   //          heal = floor(healPct/100 × maxHP), capped at maxHP.
   let p1VaelNormalGoodReads  = newP1.vaelNormalGoodReads  ?? 0
   let p2VaelNormalGoodReads  = newP2.vaelNormalGoodReads  ?? 0

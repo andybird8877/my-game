@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
-import { createInitialState, processTurn, processUlt, resolveBeforeTurn, AT_DAMAGE, SP_DAMAGE } from '../../shared/combat'
+import { createInitialState, processTurn, processUlt, resolveBeforeTurn, calcUltDamage, AT_DAMAGE, SP_DAMAGE } from '../../shared/combat'
 import { getAiMove } from '../logic/ai'
 import { CHARACTERS } from '../../shared/characters'
 import { generateNarrativeEntry } from '../logic/battleLog'
@@ -1075,12 +1075,11 @@ export default function GameBoard() {
   }
 
   function ultTip(player) {
+    const { raw, actual } = calcUltDamage(player)
     if (player.hasMourne) {
-      const ff     = player.forceFieldAccumulated ?? 0
-      const self   = player.selfDamageTotal       ?? 0
-      const raw    = ff + self
-      const actual = player.overloadActive ? Math.floor(raw * 1.75) : raw
-      const heal   = Math.min(Math.max(0, player.maxHp - player.hp), actual)
+      const ff      = player.ffTotalAbsorbed ?? 0
+      const self    = player.selfDamageTotal ?? 0
+      const heal    = Math.min(Math.max(0, player.maxHp - player.hp), actual)
       const overStr = player.overloadActive ? ` × 1.75 (OVERLOAD) = ${actual}` : ''
       return {
         name: 'COLLAPSE',
@@ -1089,26 +1088,24 @@ export default function GameBoard() {
       }
     }
     if (player.hasVael) {
-      const disables = player.vaelDisablesLanded   ?? 0
-      const reads    = player.vaelToggledGoodReads  ?? 0
-      const damage   = disables * reads
+      const disables = player.vaelDisablesLanded  ?? 0
+      const clashes  = player.vaelNormalGoodReads ?? 0
       return {
         name: 'MIND BLAST',
-        description: 'Vael channels every disable she has inflicted into a psychic detonation — each disable amplified by every Good Read she has toggled. Resets her disable count afterward.',
-        stat: `${disables} disables × ${reads} Good Reads = ${damage} dmg`,
+        description: 'Vael channels every disable she has inflicted into a psychic detonation — each disable amplified by every Good Clash she has won. Resets her disable count afterward.',
+        stat: `${disables} disables × ${clashes} Good Clashes = ${actual} dmg`,
       }
     }
     // Default: Cairan / ASSASSINATE
-    const baseAt = (player.atDamage ?? 11) * (player.atDamageMult ?? 1)
-    const baseSp = (player.spDamage ?? 14) * (player.spDamageMult ?? 1)
+    const baseAt = player.baseAtDamage ?? AT_DAMAGE
+    const baseSp = player.baseSpDamage ?? SP_DAMAGE
     const atDmg  = Math.max(player.atDmgBuff ?? 0, baseAt)
     const spDmg  = Math.max(player.spDmgBuff ?? 0, baseSp)
-    const raw    = atDmg * 2 + spDmg * 2
-    const heal   = Math.floor(raw * 0.5)
+    const heal   = Math.floor(actual * 0.5)
     return {
       name: 'ASSASSINATE',
       description: 'Cairan detonates the full combat cycle in one savage combination — two Attacks and two Specials firing simultaneously. Heals for half the damage dealt.',
-      stat: `2×AT (${Math.round(atDmg)}) + 2×SP (${Math.round(spDmg)}) = ${Math.round(raw)} dmg → heals ${heal} HP`,
+      stat: `2×AT (${Math.round(atDmg)}) + 2×SP (${Math.round(spDmg)}) = ${actual} dmg → heals ${heal} HP`,
     }
   }
 
@@ -1196,29 +1193,37 @@ export default function GameBoard() {
             AT: {Math.max(state.p1.atDmgBuff, state.p1.baseAtDamage)} | SP: {state.p1.hasMourne && state.p1.overloadActive ? Math.floor(Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage) * 1.75) : Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage)}
           </div>}
           <div className="cycle-row" style={{ display: 'flex', gap: 8, marginTop: 6, width: 280 }}>
-            {['AT', 'BL', 'SP'].map(move => (
-              <TooltipWrap key={move} tip={cycleTip(move, state.p1)} unlocked={true}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{
-                    width: '100%', aspectRatio: '1', borderRadius: '50%',
-                    backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : p1Accent) : '#333',
-                    border: '2px solid ' + (state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#b06cff' : p1Accent) : '#555'),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
-                    fontSize: 9, fontWeight: 'bold', color: state.p1.cycleLit[move] ? '#000' : '#666',
-                    textAlign: 'center', lineHeight: 1.2, cursor: 'default',
-                  }}>
-                    {Array.isArray(moveLabel(move, state.p1))
-                      ? moveLabel(move, state.p1).map((line, i) => <span key={i}>{line}</span>)
-                      : moveLabel(move, state.p1)}
+            {['AT', 'BL', 'SP'].map(move => {
+              const isP1Controllable = !isOnline || online.myIndex === 0
+              const moveDisabled = gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move
+              return (
+                <TooltipWrap key={move} tip={cycleTip(move, state.p1)} unlocked={true}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <div
+                      onClick={isP1Controllable && !moveDisabled ? () => isOnline ? handleOnlineMove(move) : handleMove(move) : undefined}
+                      style={{
+                        width: '100%', aspectRatio: '1', borderRadius: '50%',
+                        backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : p1Accent) : '#333',
+                        border: '2px solid ' + (state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#b06cff' : p1Accent) : '#555'),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
+                        fontSize: 9, fontWeight: 'bold', color: state.p1.cycleLit[move] ? '#000' : '#666',
+                        textAlign: 'center', lineHeight: 1.2,
+                        cursor: isP1Controllable ? (moveDisabled ? 'not-allowed' : 'pointer') : 'default',
+                        opacity: isP1Controllable && moveDisabled ? 0.45 : 1,
+                      }}>
+                      {Array.isArray(moveLabel(move, state.p1))
+                        ? moveLabel(move, state.p1).map((line, i) => <span key={i}>{line}</span>)
+                        : moveLabel(move, state.p1)}
+                    </div>
+                    <div style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      backgroundColor: state.p1.cycleSet.includes(move) ? '#fff' : 'transparent',
+                      border: '1px solid #555',
+                    }} />
                   </div>
-                  <div style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    backgroundColor: state.p1.cycleSet.includes(move) ? '#fff' : 'transparent',
-                    border: '1px solid #555',
-                  }} />
-                </div>
-              </TooltipWrap>
-            ))}
+                </TooltipWrap>
+              )
+            })}
           </div>
           {state.p1.hasDodge && state.p1.dodgeStreak > 0 && (
             <div style={{ fontSize: 10, color: '#7df', marginTop: 4 }}>
@@ -1358,29 +1363,37 @@ export default function GameBoard() {
             AT: {Math.max(state.p2.atDmgBuff, state.p2.baseAtDamage)} | SP: {state.p2.hasMourne && state.p2.overloadActive ? Math.floor(Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage) * 1.75) : Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage)}
           </div>}
           <div className="cycle-row" style={{ display: 'flex', gap: 8, marginTop: 6, width: 280, marginLeft: 'auto' }}>
-            {['AT', 'BL', 'SP'].map(move => (
-              <TooltipWrap key={move} tip={cycleTip(move, state.p2)} unlocked={true}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{
-                    width: '100%', aspectRatio: '1', borderRadius: '50%',
-                    backgroundColor: state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#7020c0' : p2Accent) : '#333',
-                    border: '2px solid ' + (state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#b06cff' : p2Accent) : '#555'),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
-                    fontSize: 9, fontWeight: 'bold', color: state.p2.cycleLit[move] ? '#000' : '#666',
-                    textAlign: 'center', lineHeight: 1.2, cursor: 'default',
-                  }}>
-                    {Array.isArray(moveLabel(move, state.p2))
-                      ? moveLabel(move, state.p2).map((line, i) => <span key={i}>{line}</span>)
-                      : moveLabel(move, state.p2)}
+            {['AT', 'BL', 'SP'].map(move => {
+              const isP2Controllable = isOnline && online.myIndex === 1
+              const moveDisabled = gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move
+              return (
+                <TooltipWrap key={move} tip={cycleTip(move, state.p2)} unlocked={true}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <div
+                      onClick={isP2Controllable && !moveDisabled ? () => handleOnlineMove(move) : undefined}
+                      style={{
+                        width: '100%', aspectRatio: '1', borderRadius: '50%',
+                        backgroundColor: state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#7020c0' : p2Accent) : '#333',
+                        border: '2px solid ' + (state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#b06cff' : p2Accent) : '#555'),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
+                        fontSize: 9, fontWeight: 'bold', color: state.p2.cycleLit[move] ? '#000' : '#666',
+                        textAlign: 'center', lineHeight: 1.2,
+                        cursor: isP2Controllable ? (moveDisabled ? 'not-allowed' : 'pointer') : 'default',
+                        opacity: isP2Controllable && moveDisabled ? 0.45 : 1,
+                      }}>
+                      {Array.isArray(moveLabel(move, state.p2))
+                        ? moveLabel(move, state.p2).map((line, i) => <span key={i}>{line}</span>)
+                        : moveLabel(move, state.p2)}
+                    </div>
+                    <div style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      backgroundColor: state.p2.cycleSet.includes(move) ? '#fff' : 'transparent',
+                      border: '1px solid #555',
+                    }} />
                   </div>
-                  <div style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    backgroundColor: state.p2.cycleSet.includes(move) ? '#fff' : 'transparent',
-                    border: '1px solid #555',
-                  }} />
-                </div>
-              </TooltipWrap>
-            ))}
+                </TooltipWrap>
+              )
+            })}
           </div>
           {state.p2.hasDodge && state.p2.dodgeStreak > 0 && (
             <div style={{ fontSize: 10, color: '#7df', marginTop: 4, textAlign: 'right' }}>
@@ -1492,16 +1505,6 @@ export default function GameBoard() {
         </div>
       )}
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        {MOVES.map(move => (
-          <button
-            key={move}
-            onClick={() => isOnline ? handleOnlineMove(move) : handleMove(move)}
-            disabled={gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move}
-            className={litClass(myPlayer, move)}
-          >
-            {move === 'BL' ? (Array.isArray(blLabel(myPlayer)) ? blLabel(myPlayer).join(' ') : blLabel(myPlayer)) : move}
-          </button>
-        ))}
         {myPlayer.ultimateReady && !gameOver && (
           <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
             <button
