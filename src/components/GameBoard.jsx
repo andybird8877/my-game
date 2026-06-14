@@ -560,8 +560,8 @@ export default function GameBoard() {
               setTimeout(() => setEvadeFlashes({ p1: ltP1Evaded, p2: ltP2Evaded, key: ek }), 2000)
               setTimeout(() => setEvadeFlashes(s => s.key === ek ? { p1: false, p2: false, key: 0 } : s), 4000)
             }
-            const ltP1Dis = lt?.p1VaelDisabledMove ?? null
-            const ltP2Dis = lt?.p2VaelDisabledMove ?? null
+            const ltP1Dis = lt?.p2VaelDisabledMove ?? null  // P2's Vael → P1 afflicted
+            const ltP2Dis = lt?.p1VaelDisabledMove ?? null  // P1's Vael → P2 afflicted
             if (ltP1Dis || ltP2Dis) {
               const dk = Date.now() + 1
               setTimeout(() => setDisableFlashes({ p1: ltP1Dis, p2: ltP2Dis, key: dk }), 2000)
@@ -875,8 +875,10 @@ export default function GameBoard() {
       setTimeout(() => setEvadeFlashes({ p1: p1Evaded, p2: p2Evaded, key: evadeKey }), 2000)
       setTimeout(() => setEvadeFlashes(s => s.key === evadeKey ? { p1: false, p2: false, key: 0 } : s), 4000)
     }
-    const p1Disabled = lt.p1VaelDisabledMove ?? null
-    const p2Disabled = lt.p2VaelDisabledMove ?? null
+    // p1VaelDisabledMove = P1's Vael disabled P2 (P2 is afflicted → flash on P2's portrait)
+    // p2VaelDisabledMove = P2's Vael disabled P1 (P1 is afflicted → flash on P1's portrait)
+    const p1Disabled = lt.p2VaelDisabledMove ?? null
+    const p2Disabled = lt.p1VaelDisabledMove ?? null
     if (p1Disabled || p2Disabled) {
       const disableKey = Date.now() + 1
       setTimeout(() => setDisableFlashes({ p1: p1Disabled, p2: p2Disabled, key: disableKey }), 2000)
@@ -1176,7 +1178,7 @@ export default function GameBoard() {
             )}
             {disableFlashes.p1 && (
               <div key={`p1disable-${disableFlashes.key}`} className="crit-overlay">
-                <div style={{ fontSize: 38, color: '#f90', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f80, 0 0 40px #f804' }}>{disableFlashes.p1}</div>
+                <div style={{ fontSize: 44, color: '#f90', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f80, 0 0 40px #f804' }}>✕</div>
                 <div style={{ fontSize: 11, color: '#f90', fontWeight: 'bold', letterSpacing: 2, whiteSpace: 'nowrap', textShadow: '0 0 8px #f80' }}>MOVE DISABLED!</div>
               </div>
             )}
@@ -1344,7 +1346,7 @@ export default function GameBoard() {
             )}
             {disableFlashes.p2 && (
               <div key={`p2disable-${disableFlashes.key}`} className="crit-overlay">
-                <div style={{ fontSize: 38, color: '#f90', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f80, 0 0 40px #f804' }}>{disableFlashes.p2}</div>
+                <div style={{ fontSize: 44, color: '#f90', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f80, 0 0 40px #f804' }}>✕</div>
                 <div style={{ fontSize: 11, color: '#f90', fontWeight: 'bold', letterSpacing: 2, whiteSpace: 'nowrap', textShadow: '0 0 8px #f80' }}>MOVE DISABLED!</div>
               </div>
             )}
