@@ -1298,6 +1298,17 @@ export default function GameBoard() {
             {statUpFlashes.p1ke && <div key={`p1ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p1nb && <div key={`p1nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
           </div>
+          {!gameOver && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'flex-end' }}>
+              <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
+              <UltConditionWheel done={!!state.p1.ultReadAchieved} label="READ" accent={p1Accent} ready={state.p1.ultimateReady}
+                tip={{ name: 'Good Read', description: 'Toggle Read and win the clash. Sticks until ULT fires.', unlock: 'Activate Read, then win the clash that turn.' }} />
+              <UltConditionWheel done={!!state.p1.ultChainAchieved} label="CHAIN" accent={p1Accent} ready={state.p1.ultimateReady}
+                tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read.', unlock: 'Reach a chain of 3 on AT or SP.' }} />
+              <UltConditionWheel done={!!(state.p1.cycleLit?.AT && state.p1.cycleLit?.BL && state.p1.cycleLit?.SP)} label="LIT" accent={p1Accent} ready={state.p1.ultimateReady}
+                tip={{ name: 'All Moves Lit', description: 'Win at least once with each of AT, BL, and SP across completed 3-move cycles.', unlock: 'Win with all three moves across separate cycles.' }} />
+            </div>
+          )}
         </div>
 
         {/* ── P2 ── */}
@@ -1469,6 +1480,17 @@ export default function GameBoard() {
             {statUpFlashes.p2ke && <div key={`p2ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p2nb && <div key={`p2nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
           </div>
+          {!gameOver && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+              <UltConditionWheel done={!!state.p2.ultReadAchieved} label="READ" accent={p2Accent} ready={state.p2.ultimateReady}
+                tip={{ name: 'Good Read', description: 'Toggle Read and win the clash. Sticks until ULT fires.', unlock: 'Activate Read, then win the clash that turn.' }} />
+              <UltConditionWheel done={!!state.p2.ultChainAchieved} label="CHAIN" accent={p2Accent} ready={state.p2.ultimateReady}
+                tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read.', unlock: 'Reach a chain of 3 on AT or SP.' }} />
+              <UltConditionWheel done={!!(state.p2.cycleLit?.AT && state.p2.cycleLit?.BL && state.p2.cycleLit?.SP)} label="LIT" accent={p2Accent} ready={state.p2.ultimateReady}
+                tip={{ name: 'All Moves Lit', description: 'Win at least once with each of AT, BL, and SP across completed 3-move cycles.', unlock: 'Win with all three moves across separate cycles.' }} />
+              <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1477,33 +1499,6 @@ export default function GameBoard() {
         {activeEffect && activeEffect.type !== 'announce' && renderEffectBanner(activeEffect)}
       </div>
 
-      {/* ULT condition wheels — shows progress toward all 3 unlock requirements */}
-      {!gameOver && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
-          <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
-          <UltConditionWheel
-            done={!!myPlayer.ultReadAchieved}
-            label="READ"
-            accent={myAccent}
-            ready={myPlayer.ultimateReady}
-            tip={{ name: 'Good Read', description: 'Toggle Read and win the clash. Achieved once — sticks until you fire your Ultimate.', unlock: 'Activate Read, then win the clash that turn.' }}
-          />
-          <UltConditionWheel
-            done={!!myPlayer.ultChainAchieved}
-            label="CHAIN"
-            accent={myAccent}
-            ready={myPlayer.ultimateReady}
-            tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read. The damage buff threshold is lower — this tracks chains of 3+. Sticks until ULT fires.', unlock: 'Reach a chain of 3 on AT or SP.' }}
-          />
-          <UltConditionWheel
-            done={!!(myPlayer.cycleLit?.AT && myPlayer.cycleLit?.BL && myPlayer.cycleLit?.SP)}
-            label="LIT"
-            accent={myAccent}
-            ready={myPlayer.ultimateReady}
-            tip={{ name: 'All Moves Lit', description: 'Win at least once with each of AT, BL, and SP across completed 3-move cycles. Each completed cycle can light one move per win.', unlock: 'Win with all three moves across separate cycles.' }}
-          />
-        </div>
-      )}
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         {myPlayer.ultimateReady && !gameOver && (
           <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
@@ -1534,6 +1529,24 @@ export default function GameBoard() {
             </button>
           </TooltipWrap>
         )}
+        {!gameOver && (
+          <button
+            onClick={() => setP1ReadActive(r => !r)}
+            disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+            style={{
+              background: p1ReadActive ? '#7a4800' : 'transparent',
+              color: p1ReadActive ? '#ffb347' : '#f80',
+              border: `1px ${p1ReadActive ? 'solid' : 'dashed'} #f80`,
+              fontWeight: 'bold',
+              fontSize: 10,
+              cursor: 'pointer',
+              padding: '2px 8px',
+              letterSpacing: 1,
+            }}
+          >
+            READ {p1ReadActive ? '●' : '○'}
+          </button>
+        )}
         {isOnline ? (
           <>
             <button onClick={handleOnlineRematch} disabled={!gameOver || animating || ultAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Rematch</button>
@@ -1543,15 +1556,6 @@ export default function GameBoard() {
           <>
             <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Reset</button>
             <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
-            {/* DEBUG — offline only */}
-            <button
-              onClick={() => setState(s => ({ ...s, p1: { ...s.p1, bleeds: [...s.p1.bleeds, { currentDamage: 1 }] } }))}
-              style={{ marginLeft: 12, fontSize: 9, color: '#f80', border: '1px dashed #f80', background: 'transparent', cursor: 'pointer', padding: '1px 6px' }}
-            >⚠ Bleed P1</button>
-            <button
-              onClick={() => { forceCritRef.current = true }}
-              style={{ fontSize: 9, color: '#f80', border: '1px dashed #f80', background: 'transparent', cursor: 'pointer', padding: '1px 6px' }}
-            >⚠ Force Crit</button>
           </>
         )}
       </div>
@@ -1563,16 +1567,6 @@ export default function GameBoard() {
             : `You are P${(online.myIndex ?? 0) + 1} — pick a move`}
         </div>
       )}
-
-      <div style={{ marginBottom: 24 }}>
-        <button
-          onClick={() => setP1ReadActive(r => !r)}
-          disabled={gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-          style={{ outline: p1ReadActive ? '2px solid orange' : 'none' }}
-        >
-          Read{p1ReadActive ? ' (ON)' : ''}
-        </button>
-      </div>
 
       {gameOver && (
         <div style={{ marginBottom: 16, fontWeight: 'bold' }}>
