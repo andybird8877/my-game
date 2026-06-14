@@ -1288,9 +1288,9 @@ export default function GameBoard() {
           )}
           {/* Ability progress wheels — Vael Solace */}
           {state.p1.hasVael && (
-            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
-              <VaelAbilityWheel count={state.p1.vaelDisablesLanded}   unlocked={state.p1.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
-              <VaelAbilityWheel count={state.p1.vaelNormalGoodReads}  unlocked={state.p1.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, justifyContent: 'center' }}>
+              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p1.vaelDisablesLanded}  unlocked={state.p1.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} /></div>
+              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p1.vaelNormalGoodReads} unlocked={state.p1.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} /></div>
             </div>
           )}
           {/* Stat-up flashes */}
@@ -1470,9 +1470,9 @@ export default function GameBoard() {
           )}
           {/* Ability progress wheels — Vael Solace P2 */}
           {state.p2.hasVael && (
-            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
-              <VaelAbilityWheel count={state.p2.vaelDisablesLanded}   unlocked={state.p2.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
-              <VaelAbilityWheel count={state.p2.vaelNormalGoodReads}  unlocked={state.p2.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto', justifyContent: 'center' }}>
+              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p2.vaelDisablesLanded}  unlocked={state.p2.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} /></div>
+              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p2.vaelNormalGoodReads} unlocked={state.p2.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} /></div>
             </div>
           )}
           {/* Stat-up flashes */}
@@ -1499,6 +1499,26 @@ export default function GameBoard() {
         {activeEffect && activeEffect.type !== 'announce' && renderEffectBanner(activeEffect)}
       </div>
 
+      {!gameOver && (
+        <div style={{ display: 'flex', marginBottom: 6 }}>
+          <button
+            onClick={() => setP1ReadActive(r => !r)}
+            disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+            style={{
+              background: p1ReadActive ? '#7a4800' : 'transparent',
+              color: p1ReadActive ? '#ffb347' : '#f80',
+              border: `1px ${p1ReadActive ? 'solid' : 'dashed'} #f80`,
+              fontWeight: 'bold',
+              fontSize: 10,
+              cursor: 'pointer',
+              padding: '2px 10px',
+              letterSpacing: 1,
+            }}
+          >
+            READ {p1ReadActive ? '●' : '○'}
+          </button>
+        </div>
+      )}
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         {myPlayer.ultimateReady && !gameOver && (
           <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
@@ -1528,24 +1548,6 @@ export default function GameBoard() {
               BLOODLETTER
             </button>
           </TooltipWrap>
-        )}
-        {!gameOver && (
-          <button
-            onClick={() => setP1ReadActive(r => !r)}
-            disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-            style={{
-              background: p1ReadActive ? '#7a4800' : 'transparent',
-              color: p1ReadActive ? '#ffb347' : '#f80',
-              border: `1px ${p1ReadActive ? 'solid' : 'dashed'} #f80`,
-              fontWeight: 'bold',
-              fontSize: 10,
-              cursor: 'pointer',
-              padding: '2px 8px',
-              letterSpacing: 1,
-            }}
-          >
-            READ {p1ReadActive ? '●' : '○'}
-          </button>
         )}
         {isOnline ? (
           <>
