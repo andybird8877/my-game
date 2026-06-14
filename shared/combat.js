@@ -121,6 +121,10 @@ export function createInitialState(p1Char = null, p2Char = null) {
     hasVael: !!hasVael,
     disabledMove: null,
     vaelDisablesLanded: 0,
+    jinxUnlocked: false,
+    vaelNormalGoodReads: 0,
+    vaelToggledGoodReads: 0,
+    vaelRegenUnlocked: false,
   })
   return {
     p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.weight, p1Char?.class),
@@ -256,8 +260,52 @@ export function processCollapse(gameState, ultUser) {
   }
 }
 
+function processVaelUlt(gameState, ultUser) {
+  const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
+  const attacker = gameState[ultUser]
+  const defender = gameState[defenderKey]
+
+  // Damage = vaelDisablesLanded × vaelToggledGoodReads; vaelDisablesLanded resets to 0 after use.
+  const disables      = attacker.vaelDisablesLanded    ?? 0
+  const toggledReads  = attacker.vaelToggledGoodReads  ?? 0
+  const rawDamage     = disables * toggledReads
+  const actualDamage  = rawDamage
+
+  const newDefenderHp = Math.max(0, defender.hp - actualDamage)
+
+  const entry = {
+    turn: gameState.log.length + 1,
+    isUlt: true,
+    isVaelUlt: true,
+    ultUser,
+    rawDamage,
+    actualDamage,
+    healAmount: 0,
+    vaelDisablesLanded: disables,
+    vaelToggledGoodReads: toggledReads,
+    p1Hp: ultUser === 'p1' ? attacker.hp : newDefenderHp,
+    p2Hp: ultUser === 'p2' ? attacker.hp : newDefenderHp,
+  }
+
+  return {
+    ...gameState,
+    [ultUser]: {
+      ...attacker,
+      ultimateReady: false,
+      cycleLit: {},
+      cycleSet: [],
+      litMoves: { at: false, bl: false, sp: false },
+      vaelDisablesLanded: 0,
+    },
+    [defenderKey]: { ...defender, hp: newDefenderHp },
+    lastTurn: entry,
+    log: [...gameState.log, entry],
+  }
+}
+
 export function processUlt(gameState, ultUser) {
   if (gameState[ultUser]?.hasMourne) return processCollapse(gameState, ultUser)
+  if (gameState[ultUser]?.hasVael)   return processVaelUlt(gameState, ultUser)
   const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
@@ -617,8 +665,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
 
   // ── HP ────────────────────────────────────────────────────────────────────
-  const p1Hp = Math.max(0, newP1.hp - finalP1Damage)
-  const p2Hp = Math.max(0, newP2.hp - finalP2Damage)
+  let p1Hp = Math.max(0, newP1.hp - finalP1Damage)
+  let p2Hp = Math.max(0, newP2.hp - finalP2Damage)
 
   // ── Cairan ability trackers ───────────────────────────────────────────────
   function buildAbilityUpdates(player, dealtDamage, dodgedThisTurn, critHit, cleanWin, bloodletterUsed, goodRead) {
@@ -710,16 +758,21 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     totalDealt:  finalP1Damage,
   } : null
 
-  // ── Vael Solace: SP disable mechanic ──────────────────────────────────────
-  // Clears any existing disabledMove (it was active for this turn).
-  // If Vael's SP beats the opponent's BL this turn, randomly disable one of
-  // the opponent's moves for their next turn.
+  // ── Vael Solace: SP disable mechanic + JINX passive ──────────────────────
+  // disabledMove is always cleared (was active for this turn).
+  // SP-vs-BL: fires first (priority), disables a random opponent move next turn.
+  // JINX: unlocks permanently once vaelDisablesLanded reaches 2. After unlock,
+  //   a regular (non-toggled) win — i.e. Vael wins with readActive === false —
+  //   also triggers the disable. SP-vs-BL takes priority; JINX only fires if
+  //   SP-vs-BL did not already issue a disable this turn.
+  // Each successful proc (SP-vs-BL or JINX) increments vaelDisablesLanded.
   const VAEL_MOVES = ['AT', 'BL', 'SP']
   let p1NewDisabledMove = null
   let p2NewDisabledMove = null
   let p1VaelDisablesLanded = newP1.vaelDisablesLanded ?? 0
   let p2VaelDisablesLanded = newP2.vaelDisablesLanded ?? 0
 
+  // SP-vs-BL trigger
   if (newP1.hasVael && p1Move === 'SP' && p2Move === 'BL') {
     p2NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
     p1VaelDisablesLanded++
@@ -727,6 +780,61 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (newP2.hasVael && p2Move === 'SP' && p1Move === 'BL') {
     p1NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
     p2VaelDisablesLanded++
+  }
+
+  // JINX unlock: one-time, permanent once vaelDisablesLanded reaches 2
+  const p1JinxUnlocked = (newP1.jinxUnlocked ?? false) || (newP1.hasVael && p1VaelDisablesLanded >= 2)
+  const p2JinxUnlocked = (newP2.jinxUnlocked ?? false) || (newP2.hasVael && p2VaelDisablesLanded >= 2)
+  const p1JinxJustUnlocked = !newP1.jinxUnlocked && p1JinxUnlocked
+  const p2JinxJustUnlocked = !newP2.jinxUnlocked && p2JinxUnlocked
+
+  // JINX trigger: regular (non-toggled) win, only if SP-vs-BL didn't already proc
+  if (p1JinxUnlocked && p2NewDisabledMove === null && !p1ReadActive && turnResult.winner === 'p1') {
+    p2NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
+    p1VaelDisablesLanded++
+  }
+  if (p2JinxUnlocked && p1NewDisabledMove === null && !p2ReadActive && turnResult.winner === 'p2') {
+    p1NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
+    p2VaelDisablesLanded++
+  }
+
+  // ── Vael Solace: Regen passive ────────────────────────────────────────────
+  // vaelNormalGoodReads: counts non-toggled wins (readActive === false && Vael wins).
+  // vaelRegenUnlocked: permanently true once counter reaches 3.
+  // Once unlocked, heals Vael every turn after damage — amount scales inversely
+  // with current HP% (more effective when low, minimal when near full).
+  // Formula: clamp HP% to [5,95], healPct = 25 − (clampedHPPct − 5)×(24/90),
+  //          heal = floor(healPct/100 × maxHP), capped at maxHP.
+  let p1VaelNormalGoodReads  = newP1.vaelNormalGoodReads  ?? 0
+  let p2VaelNormalGoodReads  = newP2.vaelNormalGoodReads  ?? 0
+  let p1VaelToggledGoodReads = newP1.vaelToggledGoodReads ?? 0
+  let p2VaelToggledGoodReads = newP2.vaelToggledGoodReads ?? 0
+  if (newP1.hasVael && !p1ReadActive && turnResult.winner === 'p1') p1VaelNormalGoodReads++
+  if (newP2.hasVael && !p2ReadActive && turnResult.winner === 'p2') p2VaelNormalGoodReads++
+  // Toggled good read: readActive === true and Vael wins (feeds flow state streak — same detection)
+  if (newP1.hasVael && p1Read === 'good') p1VaelToggledGoodReads++
+  if (newP2.hasVael && p2Read === 'good') p2VaelToggledGoodReads++
+
+  const p1RegenUnlocked = (newP1.vaelRegenUnlocked ?? false) || (newP1.hasVael && p1VaelNormalGoodReads >= 3)
+  const p2RegenUnlocked = (newP2.vaelRegenUnlocked ?? false) || (newP2.hasVael && p2VaelNormalGoodReads >= 3)
+  const p1RegenJustUnlocked = !newP1.vaelRegenUnlocked && p1RegenUnlocked
+  const p2RegenJustUnlocked = !newP2.vaelRegenUnlocked && p2RegenUnlocked
+
+  let p1VaelRegenHeal = 0
+  let p2VaelRegenHeal = 0
+  if (p1RegenUnlocked && p1Hp > 0) {
+    const p1MaxHp  = newP1.maxHp ?? 1
+    const hpPct    = Math.min(95, Math.max(5, (p1Hp / p1MaxHp) * 100))
+    const healPct  = 25 - (hpPct - 5) * (24 / 90)
+    p1VaelRegenHeal = Math.floor((healPct / 100) * p1MaxHp)
+    p1Hp = Math.min(p1MaxHp, p1Hp + p1VaelRegenHeal)
+  }
+  if (p2RegenUnlocked && p2Hp > 0) {
+    const p2MaxHp  = newP2.maxHp ?? 1
+    const hpPct    = Math.min(95, Math.max(5, (p2Hp / p2MaxHp) * 100))
+    const healPct  = 25 - (hpPct - 5) * (24 / 90)
+    p2VaelRegenHeal = Math.floor((healPct / 100) * p2MaxHp)
+    p2Hp = Math.min(p2MaxHp, p2Hp + p2VaelRegenHeal)
   }
 
   // ── Log entry ─────────────────────────────────────────────────────────────
@@ -770,6 +878,14 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     blTieWinner: blTieResult?.winner ?? null,
     blTieReason: blTieResult?.reason ?? null,
     blTieDamage: blTieResult?.damage ?? null,
+    p1JinxJustUnlocked,
+    p2JinxJustUnlocked,
+    p1VaelDisabledMove: p2NewDisabledMove,
+    p2VaelDisabledMove: p1NewDisabledMove,
+    p1RegenJustUnlocked,
+    p2RegenJustUnlocked,
+    p1VaelRegenHeal,
+    p2VaelRegenHeal,
   }
 
   return {
@@ -781,6 +897,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       pendingLifesteal: p1PendingLifesteal,
       disabledMove: p1NewDisabledMove,
       vaelDisablesLanded: p1VaelDisablesLanded,
+      jinxUnlocked: p1JinxUnlocked,
+      vaelNormalGoodReads: p1VaelNormalGoodReads,
+      vaelToggledGoodReads: p1VaelToggledGoodReads,
+      vaelRegenUnlocked: p1RegenUnlocked,
     },
     p2: {
       ...newP2, hp: p2Hp, bleeds: p2Bleeds, ...dodgeP2, ...p2AbilityUpdates, ...p2MourneUpdates,
@@ -789,6 +909,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       pendingLifesteal: p2PendingLifesteal,
       disabledMove: p2NewDisabledMove,
       vaelDisablesLanded: p2VaelDisablesLanded,
+      jinxUnlocked: p2JinxUnlocked,
+      vaelNormalGoodReads: p2VaelNormalGoodReads,
+      vaelToggledGoodReads: p2VaelToggledGoodReads,
+      vaelRegenUnlocked: p2RegenUnlocked,
     },
     lastTurn: entry,
     log: [...gameState.log, entry],
