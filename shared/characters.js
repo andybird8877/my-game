@@ -24,7 +24,7 @@ for (const affinity of affinities) {
       CHARACTERS.push({
         id:       _id++,
         name:     isCairan ? 'Cairan Vex' : isMourne ? 'Mourne' : isVael ? 'Vael Solace' : `${cap(affinity)} ${cap(weight)} ${cap(cls)}`,
-        portrait:  isCairan ? '/portraits/cairan-vex.png' : isMourne ? '/portraits/mourne.png' : isVael ? '/portraits/vael-solace.png' : null,
+        portrait:  isCairan ? '/portraits/cairan-vex.png' : isMourne ? '/portraits/mourne.png' : isVael ? '/portraits/vael-solace.svg' : null,
         hasDodge:  isCairan,
         hasMourne: isMourne,
         hasVael:   isVael,

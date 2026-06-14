@@ -475,6 +475,21 @@ export function resolveBeforeTurn(gameState) {
     steps.push({ type: 'announce', message: prefix + msg, stateAfter: null })
   }
 
+  // ── Vael Solace regen ─────────────────────────────────────────────────────
+  // Fires after all damage/bleed/Mourne effects are settled for the turn.
+  for (const playerKey of ['p1', 'p2']) {
+    const player = state[playerKey]
+    if (!player.vaelRegenUnlocked || player.hp <= 0) continue
+    const maxHp   = player.maxHp ?? 1
+    const hpPct   = Math.min(95, Math.max(5, (player.hp / maxHp) * 100))
+    const healPct = 25 - (hpPct - 5) * (24 / 90)
+    const heal    = Math.floor((healPct / 100) * maxHp)
+    if (heal <= 0) continue
+    const newHp = Math.min(maxHp, player.hp + heal)
+    state = { ...state, [playerKey]: { ...state[playerKey], hp: newHp } }
+    steps.push({ player: playerKey, type: 'vael_regen', heal, stateAfter: state })
+  }
+
   return steps
 }
 
@@ -665,8 +680,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
 
   // ── HP ────────────────────────────────────────────────────────────────────
-  let p1Hp = Math.max(0, newP1.hp - finalP1Damage)
-  let p2Hp = Math.max(0, newP2.hp - finalP2Damage)
+  const p1Hp = Math.max(0, newP1.hp - finalP1Damage)
+  const p2Hp = Math.max(0, newP2.hp - finalP2Damage)
 
   // ── Cairan ability trackers ───────────────────────────────────────────────
   function buildAbilityUpdates(player, dealtDamage, dodgedThisTurn, critHit, cleanWin, bloodletterUsed, goodRead) {
@@ -819,23 +834,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const p2RegenUnlocked = (newP2.vaelRegenUnlocked ?? false) || (newP2.hasVael && p2VaelNormalGoodReads >= 3)
   const p1RegenJustUnlocked = !newP1.vaelRegenUnlocked && p1RegenUnlocked
   const p2RegenJustUnlocked = !newP2.vaelRegenUnlocked && p2RegenUnlocked
-
-  let p1VaelRegenHeal = 0
-  let p2VaelRegenHeal = 0
-  if (p1RegenUnlocked && p1Hp > 0) {
-    const p1MaxHp  = newP1.maxHp ?? 1
-    const hpPct    = Math.min(95, Math.max(5, (p1Hp / p1MaxHp) * 100))
-    const healPct  = 25 - (hpPct - 5) * (24 / 90)
-    p1VaelRegenHeal = Math.floor((healPct / 100) * p1MaxHp)
-    p1Hp = Math.min(p1MaxHp, p1Hp + p1VaelRegenHeal)
-  }
-  if (p2RegenUnlocked && p2Hp > 0) {
-    const p2MaxHp  = newP2.maxHp ?? 1
-    const hpPct    = Math.min(95, Math.max(5, (p2Hp / p2MaxHp) * 100))
-    const healPct  = 25 - (hpPct - 5) * (24 / 90)
-    p2VaelRegenHeal = Math.floor((healPct / 100) * p2MaxHp)
-    p2Hp = Math.min(p2MaxHp, p2Hp + p2VaelRegenHeal)
-  }
+  // Regen heal is applied in resolveBeforeTurn, not here.
 
   // ── Log entry ─────────────────────────────────────────────────────────────
   const turn = gameState.log.length + 1
@@ -884,8 +883,6 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2VaelDisabledMove: p1NewDisabledMove,
     p1RegenJustUnlocked,
     p2RegenJustUnlocked,
-    p1VaelRegenHeal,
-    p2VaelRegenHeal,
   }
 
   return {

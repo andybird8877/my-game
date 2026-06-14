@@ -21,6 +21,8 @@ const TIPS = {
   moveBl:      { name: 'Block',        description: 'A defensive stance. Deals small chip damage to an attacker. Beats Attack but loses to Special.' },
   moveDodge:   { name: 'Dodge',        description: 'Cairan\'s unique counter. First dodge absorbs all incoming chip damage. Each consecutive dodge launches a counter-attack for double the attacker\'s AT damage.' },
   moveFF:      { name: 'Force Field',  description: 'Mourne\'s defensive barrier. Absorbs chip damage into the Force Field accumulator instead of taking HP loss. When the accumulator reaches 10, the stored energy fires back at the opponent.' },
+  vaelJinx:   { name: 'JINX',        description: 'After unlocking, any regular (non-toggled) RPS win also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',                      unlock: 'Land SP disable 2 times.' },
+  vaelRegen:  { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 non-toggled good reads.' },
 }
 
 // ─── Tooltip UI ───────────────────────────────────────────────────────────────
@@ -212,6 +214,47 @@ function MourneAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
         )}
       </svg>
       <div style={{ fontSize: 9, color: unlocked ? '#c890ff' : '#888', letterSpacing: 0.5, textAlign: 'center', marginTop: 3 }}>{label}</div>
+      {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
+    </div>
+  )
+}
+
+// Vael Solace ability wheel — cyan accent, freezes at full ring on unlock
+function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
+  const [show, setShow] = useState(false)
+  const [pos,  setPos]  = useState({ x: 0, y: 0 })
+  const timer = useRef(null)
+  const r = 34, cx = 40, cy = 40
+  const circumference = 2 * Math.PI * r
+  // Freeze at full once unlocked — underlying counter keeps changing for ULT, don't reflect that
+  const filled  = unlocked ? maxCount : Math.min(count, maxCount)
+  const dashLen = filled > 0 ? (circumference / maxCount) * filled : 0
+  const accent  = '#00ccff'
+  const stroke  = unlocked ? accent : '#007799'
+  return (
+    <div
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+    >
+      <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
+        {filled > 0 && (
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke={stroke} strokeWidth={unlocked ? 5 : 4}
+            strokeDasharray={`${dashLen} ${circumference}`}
+            strokeLinecap="butt"
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={unlocked ? { filter: `drop-shadow(0 0 5px ${accent})` } : undefined}
+          />
+        )}
+        {unlocked
+          ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold">✓</text>
+          : <text x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fill="#555">{count}/{maxCount}</text>
+        }
+      </svg>
+      <div style={{ fontSize: 9, color: unlocked ? accent : '#666', letterSpacing: 0.5, textAlign: 'center', marginTop: 3 }}>{label}</div>
       {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
     </div>
   )
@@ -1058,6 +1101,13 @@ export default function GameBoard() {
               <MourneAbilityWheel count={state.p1.goodToggledSpReads} unlocked={state.p1.leechUnlocked}    label="Leech"    maxCount={3}  tip={TIPS.leech} />
             </div>
           )}
+          {/* Ability progress wheels — Vael Solace */}
+          {state.p1.hasVael && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+              <VaelAbilityWheel count={state.p1.vaelDisablesLanded}   unlocked={state.p1.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
+              <VaelAbilityWheel count={state.p1.vaelNormalGoodReads}  unlocked={state.p1.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+            </div>
+          )}
           {/* Stat-up flashes */}
           <div style={{ minHeight: 14, marginTop: 2 }}>
             {statUpFlashes.p1ke && <div key={`p1ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
@@ -1200,6 +1250,13 @@ export default function GameBoard() {
               <MourneAbilityWheel count={state.p2.selfDamageTaken}    unlocked={state.p2.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p2.selfDamageTotal}    unlocked={state.p2.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
               <MourneAbilityWheel count={state.p2.goodToggledSpReads} unlocked={state.p2.leechUnlocked}    label="Leech"    maxCount={3}  tip={TIPS.leech} />
+            </div>
+          )}
+          {/* Ability progress wheels — Vael Solace P2 */}
+          {state.p2.hasVael && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+              <VaelAbilityWheel count={state.p2.vaelDisablesLanded}   unlocked={state.p2.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
+              <VaelAbilityWheel count={state.p2.vaelNormalGoodReads}  unlocked={state.p2.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
             </div>
           )}
           {/* Stat-up flashes */}
