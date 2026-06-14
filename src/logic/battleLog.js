@@ -90,7 +90,7 @@ const EVENT_TEMPLATES = {
       reactor:     '{reactor}',
       reaction:    'unable to complete the release',
       result:      '{damage} damage',
-      explanation: '{actor} reads the wind-up and shuts {reactor}\'s special down mid-charge for {damage}.',
+      explanation: '{actor} clashes through {reactor}\'s wind-up and shuts the special down mid-charge for {damage}.',
     },
   ],
 
@@ -274,7 +274,7 @@ const EVENT_TEMPLATES = {
       reactor:     '{reactor}',
       reaction:    'read goes completely wrong',
       result:      '{damage} damage to {reactor}',
-      explanation: '{reactor} misread the situation entirely — the botched read costs them extra for {damage}.',
+      explanation: '{reactor} misread the situation entirely — the Bad Read costs them extra for {damage}.',
     },
     {
       actor:       '{actor}',

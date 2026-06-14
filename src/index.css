@@ -265,6 +265,26 @@
   animation: critAnim 2s ease-in-out forwards;
 }
 
+@keyframes evadePop {
+  0%   { opacity: 0; transform: scale(0.5) translateY(6px);   }
+  18%  { opacity: 1; transform: scale(1.35) translateY(-2px); }
+  45%  { opacity: 1; transform: scale(1.05) translateY(0);    }
+  75%  { opacity: 1; transform: scale(1.0);                   }
+  100% { opacity: 0; transform: scale(0.9) translateY(-4px);  }
+}
+
+.evade-flash {
+  font-size: 22px;
+  font-weight: bold;
+  font-family: monospace;
+  color: #4ff;
+  letter-spacing: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: evadePop 1.5s ease-out forwards;
+  text-shadow: 0 0 8px #0ff, 0 0 20px #0cc;
+}
+
 @keyframes statUp {
   0%   { opacity: 0; transform: scale(0.7) translateY(3px); }
   18%  { opacity: 1; transform: scale(1.12) translateY(0);  }

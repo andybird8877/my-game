@@ -15,14 +15,14 @@ const TIPS = {
   bloodletter: { name: 'Bloodletter',  description: 'Unleash a guaranteed attack that applies Bleed regardless of opponent\'s move. Must be re-unlocked after each use.',  unlock: 'Land 2 critical hits.' },
   siphon:      { name: 'Siphon',       description: 'Restores 25% of SP damage dealt as HP each between-turns phase.',                                                     unlock: 'Take self-damage 5 times.' },
   overload:    { name: 'Overload',     description: 'When HP drops below 30%, SP damage is permanently multiplied by 1.75.',                                               unlock: 'Accumulate 10 total self-damage.' },
-  leech:       { name: 'Leech',        description: 'Good toggled reads restore HP equal to 100% of damage dealt. Suppresses self-damage that turn.',                      unlock: 'Land 3 good toggled reads (any move).' },
+  leech:       { name: 'Leech',        description: 'Good Reads restore HP equal to 100% of damage dealt. Suppresses self-damage that turn.',                         unlock: 'Land 3 Good Reads (any move).' },
   moveAt:      { name: 'Attack',       description: 'A direct strike. Beats Special but loses to Block. Chaining Attack three times in a row builds bonus damage.' },
   moveSp:      { name: 'Special',      description: 'A powerful channeled move. Beats Block but loses to Attack. Chaining Special three times in a row builds damage reduction.' },
   moveBl:      { name: 'Block',        description: 'A defensive stance. Deals small chip damage to an attacker. Beats Attack but loses to Special.' },
   moveDodge:   { name: 'Dodge',        description: 'Cairan\'s unique counter. First dodge absorbs all incoming chip damage. Each consecutive dodge launches a counter-attack for double the attacker\'s AT damage.' },
   moveFF:      { name: 'Force Field',  description: 'Mourne\'s defensive barrier. Absorbs chip damage into the Force Field accumulator instead of taking HP loss. When the accumulator reaches 10, the stored energy fires back at the opponent.' },
-  vaelJinx:   { name: 'JINX',        description: 'After unlocking, any regular (non-toggled) RPS win also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',                      unlock: 'Land SP disable 2 times.' },
-  vaelRegen:  { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 non-toggled good reads.' },
+  vaelJinx:   { name: 'JINX',        description: 'After unlocking, any Good Clash (without Read active) also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',              unlock: 'Land SP disable 2 times.' },
+  vaelRegen:  { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 Good Clashes (without Read active).' },
 }
 
 // ─── Tooltip UI ───────────────────────────────────────────────────────────────
@@ -314,12 +314,12 @@ function LogRow({ entry, p1Name, p2Name, p1Char, p2Char }) {
         T{entry.turn}
         {entry.p1Read !== 'none' && (
           <span style={{ color: entry.p1Read === 'good' ? '#4f4' : '#f55', marginLeft: 6 }}>
-            {p1Name} read {entry.p1Read}
+            {p1Name} {entry.p1Read === 'good' ? 'Good Read' : 'Bad Read'}
           </span>
         )}
         {entry.p2Read !== 'none' && (
           <span style={{ color: entry.p2Read === 'good' ? '#4f4' : '#f55', marginLeft: 6 }}>
-            {p2Name} read {entry.p2Read}
+            {p2Name} {entry.p2Read === 'good' ? 'Good Read' : 'Bad Read'}
           </span>
         )}
       </div>
@@ -377,12 +377,15 @@ export default function GameBoard() {
   const [lastReads, setLastReads]                     = useState({ p1: 'none', p2: 'none' })
   const [displayedState, setDisplayedState]           = useState(null)
   const [ultAnimating, setUltAnimating]               = useState(false)
+  const [p2UltAnimating, setP2UltAnimating]           = useState(false)
   const [collapseAnimating, setCollapseAnimating]     = useState(false)
+  const [collapseUser, setCollapseUser]               = useState('p1')  // 'p1' | 'p2'
   const [collapseData, setCollapseData]               = useState(null)
   const [critDisplay, setCritDisplay]                 = useState({ p1: false, p2: false })
   const [betweenTurns, setBetweenTurns]               = useState(false)
   const [activeEffect, setActiveEffect]               = useState(null)
   const [statUpFlashes, setStatUpFlashes]             = useState({ p1ke: false, p1nb: false, p2ke: false, p2nb: false, key: 0 })
+  const [evadeFlashes, setEvadeFlashes]               = useState({ p1: false, p2: false, key: 0 })
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
   const forceCritRef = useRef(false)
 
@@ -767,8 +770,10 @@ export default function GameBoard() {
 
   function handleMove(p1Move, opts = {}) {
     if (animating) return
+    // AI fires ULT instead of a normal turn when ready
+    if (state.p2.ultimateReady) { handleAiUlt(); return }
     const { move: p2Move, useRead: p2ReadActive } = getAiMove(state)
-    const p2UseBloodletter = state.p2.bloodletterUnlocked && state.p2.hasDodge
+    const p2UseBloodletter = !!(state.p2.bloodletterUnlocked && state.p2.hasDodge)
     const newState = processTurn(state, p1Move, p2Move, p1ReadActive, p2ReadActive, {
       p1ForceCrit: forceCritRef.current,
       p1UseBloodletter: opts.useBloodletter ?? false,
@@ -787,7 +792,7 @@ export default function GameBoard() {
       setTimeout(() => setCritDisplay({ p1: p1CritHit, p2: p2CritHit }), 2000)
       setTimeout(() => setCritDisplay({ p1: false, p2: false }), 4000)
     }
-    // Cairan stat-up flashes — non-blocking, fire after animation
+    // Cairan stat-up flashes
     const p1ke = state.p1.hasDodge && newState.p1.keenEyeUnlocked  && newState.p1.keenEyeChance > state.p1.keenEyeChance
     const p1nb = state.p1.hasDodge && newState.p1.nimbleUnlocked    && newState.p1.nimbleChance  > state.p1.nimbleChance
     const p2ke = state.p2.hasDodge && newState.p2.keenEyeUnlocked  && newState.p2.keenEyeChance > state.p2.keenEyeChance
@@ -797,6 +802,15 @@ export default function GameBoard() {
       setTimeout(() => setStatUpFlashes({ p1ke, p1nb, p2ke, p2nb, key: flashKey }), 2300)
       setTimeout(() => setStatUpFlashes(s => s.key === flashKey ? { p1ke: false, p1nb: false, p2ke: false, p2nb: false, key: 0 } : s), 3500)
     }
+    // Evade flashes — fires for any evade event (Nimble, Vael base evade, future passives)
+    const lt = newState.lastTurn
+    const p1Evaded = !!(lt.p1NimbleTriggered || lt.p1VaelEvaded)
+    const p2Evaded = !!(lt.p2NimbleTriggered || lt.p2VaelEvaded)
+    if (p1Evaded || p2Evaded) {
+      const evadeKey = Date.now()
+      setTimeout(() => setEvadeFlashes({ p1: p1Evaded, p2: p2Evaded, key: evadeKey }), 2000)
+      setTimeout(() => setEvadeFlashes(s => s.key === evadeKey ? { p1: false, p2: false, key: 0 } : s), 3500)
+    }
     // Between-turns: bleeds + Mourne effects, then unlock announcements
     const effectSteps = resolveBeforeTurn(newState)
     const unlockSteps = buildUnlockSteps(newState)
@@ -805,6 +819,36 @@ export default function GameBoard() {
 
   function handleBloodletter() {
     handleMove('AT', { useBloodletter: true })
+  }
+
+  function handleAiUlt() {
+    if (animating || p2UltAnimating || collapseAnimating) return
+    const ultState = processUlt(state, 'p2')
+
+    if (state.p2.hasMourne) {
+      const lt = ultState.lastTurn
+      setCollapseData({
+        ffAbsorbed:      lt.ffAbsorbed,
+        selfDmg:         lt.selfDmg,
+        rawDamage:       lt.rawDamage,
+        actualDamage:    lt.actualDamage,
+        healAmount:      lt.healAmount,
+        overloadBoosted: lt.overloadBoosted,
+      })
+      setCollapseUser('p2')
+      setDisplayedState(state)
+      setCollapseAnimating(true)
+      setTimeout(() => { setState(ultState); setDisplayedState(null) }, 2100)
+      setTimeout(() => { setCollapseAnimating(false); setCollapseData(null); setCollapseUser('p1') }, 3500)
+      scheduleEffects(resolveBeforeTurn(ultState), 3900)
+      return
+    }
+
+    setDisplayedState(state)
+    setP2UltAnimating(true)
+    setTimeout(() => { setState(ultState); setDisplayedState(null) }, 1050)
+    setTimeout(() => setP2UltAnimating(false), 2000)
+    scheduleEffects(resolveBeforeTurn(ultState), 2400)
   }
 
   function handleUlt() {
@@ -854,11 +898,14 @@ export default function GameBoard() {
     setAnimating(false)
     setDisplayedState(null)
     setUltAnimating(false)
+    setP2UltAnimating(false)
     setCollapseAnimating(false)
+    setCollapseUser('p1')
     setCollapseData(null)
     setBetweenTurns(false)
     setActiveEffect(null)
     setStatUpFlashes({ p1ke: false, p1nb: false, p2ke: false, p2nb: false, key: 0 })
+    setEvadeFlashes({ p1: false, p2: false, key: 0 })
     setDeathEffectsReady(false)
   }
 
@@ -870,9 +917,13 @@ export default function GameBoard() {
     setAnimating(false)
     setDisplayedState(null)
     setUltAnimating(false)
+    setP2UltAnimating(false)
+    setCollapseAnimating(false)
+    setCollapseUser('p1')
     setBetweenTurns(false)
     setActiveEffect(null)
     setStatUpFlashes({ p1ke: false, p1nb: false, p2ke: false, p2nb: false, key: 0 })
+    setEvadeFlashes({ p1: false, p2: false, key: 0 })
   }
 
   const p1Name   = state.p1Character?.name ?? 'P1'
@@ -907,6 +958,9 @@ export default function GameBoard() {
     } else if (type === 'lit_at_lifesteal') {
       color = '#ff6080'
       text  = `${playerName} LIT ATTACK — lifesteal +${heal} HP`
+    } else if (type === 'vael_regen') {
+      color = '#c8e040'
+      text  = `${playerName} regenerated +${heal} HP`
     }
 
     if (!text) return null
@@ -950,6 +1004,8 @@ export default function GameBoard() {
     <>
     {ultAnimating && <div className="ult-screen-overlay" />}
     {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}</div>}
+    {p2UltAnimating && <div className="ult-screen-overlay" />}
+    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}</div>}
     {collapseAnimating && <div className="collapse-overlay" />}
     {collapseAnimating && <div className="collapse-title">COLLAPSE</div>}
     {collapseAnimating && collapseData && (
@@ -973,7 +1029,7 @@ export default function GameBoard() {
               <span style={{ color: '#aaa' }}>HP:{dispP1Hp} AT:{Math.max(state.p1.atDmgBuff, state.p1.baseAtDamage)} SP:{state.p1.hasMourne && state.p1.overloadActive ? Math.floor(Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage) * 1.75) : Math.max(state.p1.spDmgBuff, state.p1.baseSpDamage)}</span>
             </div>
           )}
-          <div className={['portrait-wrap', collapseAnimating ? 'collapse-charge' : ultAnimating ? 'ult-charge' : animating ? 'p1-fight' : undefined].filter(Boolean).join(' ')}
+          <div className={['portrait-wrap', collapseAnimating ? (collapseUser === 'p1' ? 'collapse-charge' : 'collapse-hit') : ultAnimating ? 'ult-charge' : p2UltAnimating ? 'ult-hit' : animating ? 'p1-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, display: 'inline-block' }}>
             <img
               src={state.p1Character?.portrait ?? '/src/img/tyrone.png'}
@@ -1112,6 +1168,7 @@ export default function GameBoard() {
           <div style={{ minHeight: 14, marginTop: 2 }}>
             {statUpFlashes.p1ke && <div key={`p1ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p1nb && <div key={`p1nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
+            {evadeFlashes.p1 && <div key={`p1evade-${evadeFlashes.key}`} className="evade-flash">EVADE!</div>}
           </div>
         </div>
 
@@ -1129,7 +1186,7 @@ export default function GameBoard() {
           {!isMobile && state.p2.overloadActive && (
             <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>OVERLOAD</div>
           )}
-          <div className={['portrait-wrap', collapseAnimating ? 'collapse-hit' : ultAnimating ? 'ult-hit' : animating ? 'p2-fight' : undefined].filter(Boolean).join(' ')}
+          <div className={['portrait-wrap', collapseAnimating ? (collapseUser === 'p2' ? 'collapse-charge' : 'collapse-hit') : ultAnimating ? 'ult-hit' : p2UltAnimating ? 'ult-charge' : animating ? 'p2-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, marginLeft: 'auto', display: 'block' }}>
             <img
               src={state.p2Character?.portrait ?? '/src/img/stotch.png'}
@@ -1263,6 +1320,7 @@ export default function GameBoard() {
           <div style={{ minHeight: 14, marginTop: 2, textAlign: 'right' }}>
             {statUpFlashes.p2ke && <div key={`p2ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p2nb && <div key={`p2nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
+            {evadeFlashes.p2 && <div key={`p2evade-${evadeFlashes.key}`} className="evade-flash">EVADE!</div>}
           </div>
         </div>
       </div>
@@ -1277,7 +1335,7 @@ export default function GameBoard() {
           <button
             key={move}
             onClick={() => isOnline ? handleOnlineMove(move) : handleMove(move)}
-            disabled={gameOver || animating || ultAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move}
+            disabled={gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move}
             className={litClass(myPlayer, move)}
           >
             {move === 'BL' ? (Array.isArray(blLabel(myPlayer)) ? blLabel(myPlayer).join(' ') : blLabel(myPlayer)) : move}
@@ -1286,7 +1344,7 @@ export default function GameBoard() {
         {myPlayer.ultimateReady && !gameOver && (
           <button
             onClick={isOnline ? handleOnlineUlt : handleUlt}
-            disabled={animating || ultAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+            disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
             style={{ background: myPlayer.hasMourne ? '#7020c0' : '#1a0008', color: myPlayer.hasMourne ? '#e0b0ff' : '#cc2244', fontWeight: 'bold', border: `1px solid ${myPlayer.hasMourne ? 'transparent' : '#cc2244'}`, padding: '2px 10px', cursor: 'pointer', letterSpacing: 1 }}
           >
             {myPlayer.hasMourne ? 'COLLAPSE' : myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
@@ -1297,7 +1355,7 @@ export default function GameBoard() {
           <TooltipWrap tip={TIPS.bloodletter} unlocked={true}>
             <button
               onClick={isOnline ? handleOnlineBloodletter : handleBloodletter}
-              disabled={animating || ultAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+              disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
               style={{
                 background: 'transparent',
                 color: '#c44',
@@ -1317,7 +1375,7 @@ export default function GameBoard() {
           </>
         ) : (
           <>
-            <button onClick={handleReset} disabled={animating || ultAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Reset</button>
+            <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Reset</button>
             <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
             {/* DEBUG — offline only */}
             <button
@@ -1343,7 +1401,7 @@ export default function GameBoard() {
       <div style={{ marginBottom: 24 }}>
         <button
           onClick={() => setP1ReadActive(r => !r)}
-          disabled={gameOver || animating || betweenTurns || (isOnline && online.pendingMove)}
+          disabled={gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
           style={{ outline: p1ReadActive ? '2px solid orange' : 'none' }}
         >
           Read{p1ReadActive ? ' (ON)' : ''}
