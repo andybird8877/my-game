@@ -99,6 +99,7 @@ export function createInitialState(p1Char = null, p2Char = null) {
     hasDodge: !!hasDodge, dodgeStreak: 0,
     atChain: 0, spChain: 0, atDmgBuff: 0, spDmgBuff: 0,
     cycleSet: [], cycleLit: {}, litMoves: { at: false, bl: false, sp: false },
+    ultReadAchieved: false, ultChainAchieved: false,
     pendingLifesteal: 0,
     ultimateReady: false, flowState: false,
     consecutiveGoodReads: 0, bleeds: [],
@@ -177,7 +178,6 @@ function updateCycle(player, move, readActive) {
       cycleSet: [move],
       cycleLit: newCycleLit,
       litMoves: { at: !!newCycleLit.AT, bl: !!newCycleLit.BL, sp: !!newCycleLit.SP },
-      ultimateReady: !!(newCycleLit.AT && newCycleLit.BL && newCycleLit.SP),
     }
   }
 
@@ -253,6 +253,8 @@ export function processCollapse(gameState, ultUser) {
       cycleLit: {},
       cycleSet: [],
       litMoves: { at: false, bl: false, sp: false },
+      ultReadAchieved: false,
+      ultChainAchieved: false,
     },
     [defenderKey]: { ...defender, hp: newDefenderHp },
     lastTurn: entry,
@@ -295,6 +297,8 @@ function processVaelUlt(gameState, ultUser) {
       cycleLit: {},
       cycleSet: [],
       litMoves: { at: false, bl: false, sp: false },
+      ultReadAchieved: false,
+      ultChainAchieved: false,
       vaelDisablesLanded: 0,
     },
     [defenderKey]: { ...defender, hp: newDefenderHp },
@@ -343,6 +347,8 @@ export function processUlt(gameState, ultUser) {
       cycleLit: {},
       cycleSet: [],
       litMoves: { at: false, bl: false, sp: false },
+      ultReadAchieved: false,
+      ultChainAchieved: false,
     },
     [defenderKey]: { ...defender, hp: newDefenderHp },
     lastTurn: entry,
@@ -506,6 +512,16 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
 
   const newP1 = { ...updateChains(gameState.p1, p1Move, p1ReadActive), ...updateCycle(gameState.p1, p1Move, p1ReadActive), ...p1FlowUpdate }
   const newP2 = { ...updateChains(gameState.p2, p2Move, p2ReadActive), ...updateCycle(gameState.p2, p2Move, p2ReadActive), ...p2FlowUpdate }
+
+  // ── Ultimate unlock: three sticky conditions (all must be achieved) ────────
+  const p1UltReadAchieved  = (newP1.ultReadAchieved  ?? false) || (p1ReadActive && p1Read === 'good')
+  const p2UltReadAchieved  = (newP2.ultReadAchieved  ?? false) || (p2ReadActive && p2Read === 'good')
+  const p1UltChainAchieved = (newP1.ultChainAchieved ?? false) || newP1.atChain >= 3 || newP1.spChain >= 3
+  const p2UltChainAchieved = (newP2.ultChainAchieved ?? false) || newP2.atChain >= 3 || newP2.spChain >= 3
+  const p1AllLit = !!(newP1.cycleLit?.AT && newP1.cycleLit?.BL && newP1.cycleLit?.SP)
+  const p2AllLit = !!(newP2.cycleLit?.AT && newP2.cycleLit?.BL && newP2.cycleLit?.SP)
+  const p1UltimateReady = p1UltReadAchieved && p1UltChainAchieved && p1AllLit
+  const p2UltimateReady = p2UltReadAchieved && p2UltChainAchieved && p2AllLit
 
   const p1LitMoves = newP1.litMoves ?? { at: false, bl: false, sp: false }
   const p2LitMoves = newP2.litMoves ?? { at: false, bl: false, sp: false }
@@ -913,6 +929,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       vaelNormalGoodReads: p1VaelNormalGoodReads,
       vaelToggledGoodReads: p1VaelToggledGoodReads,
       vaelRegenUnlocked: p1RegenUnlocked,
+      ultReadAchieved: p1UltReadAchieved,
+      ultChainAchieved: p1UltChainAchieved,
+      ultimateReady: p1UltimateReady,
     },
     p2: {
       ...newP2, hp: p2Hp, bleeds: p2Bleeds, ...dodgeP2, ...p2AbilityUpdates, ...p2MourneUpdates,
@@ -925,6 +944,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       vaelNormalGoodReads: p2VaelNormalGoodReads,
       vaelToggledGoodReads: p2VaelToggledGoodReads,
       vaelRegenUnlocked: p2RegenUnlocked,
+      ultReadAchieved: p2UltReadAchieved,
+      ultChainAchieved: p2UltChainAchieved,
+      ultimateReady: p2UltimateReady,
     },
     lastTurn: entry,
     log: [...gameState.log, entry],

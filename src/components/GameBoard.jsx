@@ -260,6 +260,55 @@ function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
   )
 }
 
+// ─── Ult Condition Wheel ──────────────────────────────────────────────────────
+// Binary progress ring — lit when condition is met, glows+pulses when ultimateReady
+
+function UltConditionWheel({ done, label, accent, tip, ready }) {
+  const [show, setShow] = useState(false)
+  const [pos,  setPos]  = useState({ x: 0, y: 0 })
+  const timer = useRef(null)
+  const r = 20, cx = 24, cy = 24
+  const circumference = 2 * Math.PI * r
+  const dimAccent = accent + '88'
+
+  return (
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default', width: 52 }}
+      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+    >
+      <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
+        {/* Track */}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#2a2a2a" strokeWidth={3} />
+        {/* Fill ring */}
+        <circle
+          cx={cx} cy={cy} r={r} fill="none"
+          stroke={done ? accent : '#333'}
+          strokeWidth={done ? 4 : 2}
+          strokeDasharray={done ? `${circumference} 0` : `${circumference * 0.12} ${circumference * 0.88}`}
+          transform={`rotate(-90 ${cx} ${cy})`}
+          style={done ? {
+            filter: `drop-shadow(0 0 ${ready ? 6 : 3}px ${accent})`,
+            animation: ready ? 'ultPulse 1.1s ease-in-out infinite' : undefined,
+          } : undefined}
+        />
+        {/* Center glyph */}
+        {done
+          ? <text x={cx} y={cy + 5} textAnchor="middle" fontSize={15} fill={accent} fontWeight="bold"
+              style={ready ? { animation: 'ultPulse 1.1s ease-in-out infinite' } : undefined}>✓</text>
+          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={9} fill="#3a3a3a">○○○</text>
+        }
+      </svg>
+      <div style={{
+        fontSize: 8, letterSpacing: 0.5, textAlign: 'center', marginTop: 1,
+        color: done ? accent : '#3a3a3a', fontWeight: done ? 'bold' : 'normal',
+      }}>{label}</div>
+      {show && tip && <TooltipBox {...tip} unlocked={done} x={pos.x} y={pos.y} />}
+    </div>
+  )
+}
+
 // ─── Log ──────────────────────────────────────────────────────────────────────
 
 // Colour by event key family — makes the log scannable at a glance
@@ -386,6 +435,7 @@ export default function GameBoard() {
   const [activeEffect, setActiveEffect]               = useState(null)
   const [statUpFlashes, setStatUpFlashes]             = useState({ p1ke: false, p1nb: false, p2ke: false, p2nb: false, key: 0 })
   const [evadeFlashes, setEvadeFlashes]               = useState({ p1: false, p2: false, key: 0 })
+  const [disableFlashes, setDisableFlashes]           = useState({ p1: null, p2: null, key: 0 })
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
   const forceCritRef = useRef(false)
 
@@ -502,6 +552,20 @@ export default function GameBoard() {
             if (lt?.p1CritHit || lt?.p2CritHit) {
               setTimeout(() => setCritDisplay({ p1: !!lt.p1CritHit, p2: !!lt.p2CritHit }), 2000)
               setTimeout(() => setCritDisplay({ p1: false, p2: false }), 4000)
+            }
+            const ltP1Evaded = !!(lt?.p1NimbleTriggered || lt?.p1VaelEvaded)
+            const ltP2Evaded = !!(lt?.p2NimbleTriggered || lt?.p2VaelEvaded)
+            if (ltP1Evaded || ltP2Evaded) {
+              const ek = Date.now()
+              setTimeout(() => setEvadeFlashes({ p1: ltP1Evaded, p2: ltP2Evaded, key: ek }), 2000)
+              setTimeout(() => setEvadeFlashes(s => s.key === ek ? { p1: false, p2: false, key: 0 } : s), 4000)
+            }
+            const ltP1Dis = lt?.p1VaelDisabledMove ?? null
+            const ltP2Dis = lt?.p2VaelDisabledMove ?? null
+            if (ltP1Dis || ltP2Dis) {
+              const dk = Date.now() + 1
+              setTimeout(() => setDisableFlashes({ p1: ltP1Dis, p2: ltP2Dis, key: dk }), 2000)
+              setTimeout(() => setDisableFlashes(s => s.key === dk ? { p1: null, p2: null, key: 0 } : s), 4000)
             }
             setTimeout(() => { setState(pendingStateRef.current); setDisplayedState(null) }, 2000)
             setTimeout(() => setAnimating(false), 2250)
@@ -802,14 +866,21 @@ export default function GameBoard() {
       setTimeout(() => setStatUpFlashes({ p1ke, p1nb, p2ke, p2nb, key: flashKey }), 2300)
       setTimeout(() => setStatUpFlashes(s => s.key === flashKey ? { p1ke: false, p1nb: false, p2ke: false, p2nb: false, key: 0 } : s), 3500)
     }
-    // Evade flashes — fires for any evade event (Nimble, Vael base evade, future passives)
+    // Evade + disable portrait flashes
     const lt = newState.lastTurn
     const p1Evaded = !!(lt.p1NimbleTriggered || lt.p1VaelEvaded)
     const p2Evaded = !!(lt.p2NimbleTriggered || lt.p2VaelEvaded)
     if (p1Evaded || p2Evaded) {
       const evadeKey = Date.now()
       setTimeout(() => setEvadeFlashes({ p1: p1Evaded, p2: p2Evaded, key: evadeKey }), 2000)
-      setTimeout(() => setEvadeFlashes(s => s.key === evadeKey ? { p1: false, p2: false, key: 0 } : s), 3500)
+      setTimeout(() => setEvadeFlashes(s => s.key === evadeKey ? { p1: false, p2: false, key: 0 } : s), 4000)
+    }
+    const p1Disabled = lt.p1VaelDisabledMove ?? null
+    const p2Disabled = lt.p2VaelDisabledMove ?? null
+    if (p1Disabled || p2Disabled) {
+      const disableKey = Date.now() + 1
+      setTimeout(() => setDisableFlashes({ p1: p1Disabled, p2: p2Disabled, key: disableKey }), 2000)
+      setTimeout(() => setDisableFlashes(s => s.key === disableKey ? { p1: null, p2: null, key: 0 } : s), 4000)
     }
     // Between-turns: bleeds + Mourne effects, then unlock announcements
     const effectSteps = resolveBeforeTurn(newState)
@@ -930,6 +1001,7 @@ export default function GameBoard() {
   const p2Name   = state.p2Character?.name ?? 'P2'
   const p1Accent = AFFINITY_COLOR[state.p1Character?.affinity] ?? '#e03050'
   const p2Accent = AFFINITY_COLOR[state.p2Character?.affinity] ?? '#e03050'
+  const myAccent = (isOnline && online.myIndex === 1) ? p2Accent : p1Accent
 
   // ── Effect banner helpers ─────────────────────────────────────────────────
   function renderEffectBanner(effect) {
@@ -1000,6 +1072,44 @@ export default function GameBoard() {
     return TIPS.moveBl
   }
 
+  function ultTip(player) {
+    if (player.hasMourne) {
+      const ff     = player.forceFieldAccumulated ?? 0
+      const self   = player.selfDamageTotal       ?? 0
+      const raw    = ff + self
+      const actual = player.overloadActive ? Math.floor(raw * 1.75) : raw
+      const heal   = Math.min(Math.max(0, player.maxHp - player.hp), actual)
+      const overStr = player.overloadActive ? ` × 1.75 (OVERLOAD) = ${actual}` : ''
+      return {
+        name: 'COLLAPSE',
+        description: 'Mourne detonates everything she has absorbed — force field damage and all self-inflicted pain converge into a single crushing strike. She heals for the full damage dealt.',
+        stat: `FF ${ff} + Self-dmg ${self} = ${raw}${overStr} → deals ${actual}, heals ${heal} HP`,
+      }
+    }
+    if (player.hasVael) {
+      const disables = player.vaelDisablesLanded   ?? 0
+      const reads    = player.vaelToggledGoodReads  ?? 0
+      const damage   = disables * reads
+      return {
+        name: 'MIND BLAST',
+        description: 'Vael channels every disable she has inflicted into a psychic detonation — each disable amplified by every Good Read she has toggled. Resets her disable count afterward.',
+        stat: `${disables} disables × ${reads} Good Reads = ${damage} dmg`,
+      }
+    }
+    // Default: Cairan / ASSASSINATE
+    const baseAt = (player.atDamage ?? 11) * (player.atDamageMult ?? 1)
+    const baseSp = (player.spDamage ?? 14) * (player.spDamageMult ?? 1)
+    const atDmg  = Math.max(player.atDmgBuff ?? 0, baseAt)
+    const spDmg  = Math.max(player.spDmgBuff ?? 0, baseSp)
+    const raw    = atDmg * 2 + spDmg * 2
+    const heal   = Math.floor(raw * 0.5)
+    return {
+      name: 'ASSASSINATE',
+      description: 'Cairan detonates the full combat cycle in one savage combination — two Attacks and two Specials firing simultaneously. Heals for half the damage dealt.',
+      stat: `2×AT (${Math.round(atDmg)}) + 2×SP (${Math.round(spDmg)}) = ${Math.round(raw)} dmg → heals ${heal} HP`,
+    }
+  }
+
   return (
     <>
     {ultAnimating && <div className="ult-screen-overlay" />}
@@ -1056,6 +1166,18 @@ export default function GameBoard() {
               <div className="crit-overlay">
                 <div style={{ fontSize: 90, color: '#f00', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f00, 0 0 40px #f008' }}>!</div>
                 <div style={{ fontSize: 13, color: '#f00', fontWeight: 'bold', letterSpacing: 3, whiteSpace: 'nowrap', textShadow: '0 0 8px #f00' }}>CRITICAL HIT!</div>
+              </div>
+            )}
+            {evadeFlashes.p1 && (
+              <div key={`p1evade-${evadeFlashes.key}`} className="crit-overlay">
+                <div style={{ fontSize: 52, color: '#4ff', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #0ff, 0 0 40px #0cc8' }}>◌</div>
+                <div style={{ fontSize: 14, color: '#4ff', fontWeight: 'bold', letterSpacing: 3, whiteSpace: 'nowrap', textShadow: '0 0 8px #0ff' }}>EVADE!</div>
+              </div>
+            )}
+            {disableFlashes.p1 && (
+              <div key={`p1disable-${disableFlashes.key}`} className="crit-overlay">
+                <div style={{ fontSize: 38, color: '#f90', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f80, 0 0 40px #f804' }}>{disableFlashes.p1}</div>
+                <div style={{ fontSize: 11, color: '#f90', fontWeight: 'bold', letterSpacing: 2, whiteSpace: 'nowrap', textShadow: '0 0 8px #f80' }}>MOVE DISABLED!</div>
               </div>
             )}
           </div>
@@ -1168,7 +1290,6 @@ export default function GameBoard() {
           <div style={{ minHeight: 14, marginTop: 2 }}>
             {statUpFlashes.p1ke && <div key={`p1ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p1nb && <div key={`p1nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
-            {evadeFlashes.p1 && <div key={`p1evade-${evadeFlashes.key}`} className="evade-flash">EVADE!</div>}
           </div>
         </div>
 
@@ -1213,6 +1334,18 @@ export default function GameBoard() {
               <div className="crit-overlay">
                 <div style={{ fontSize: 90, color: '#f00', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f00, 0 0 40px #f008' }}>!</div>
                 <div style={{ fontSize: 13, color: '#f00', fontWeight: 'bold', letterSpacing: 3, whiteSpace: 'nowrap', textShadow: '0 0 8px #f00' }}>CRITICAL HIT!</div>
+              </div>
+            )}
+            {evadeFlashes.p2 && (
+              <div key={`p2evade-${evadeFlashes.key}`} className="crit-overlay">
+                <div style={{ fontSize: 52, color: '#4ff', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #0ff, 0 0 40px #0cc8' }}>◌</div>
+                <div style={{ fontSize: 14, color: '#4ff', fontWeight: 'bold', letterSpacing: 3, whiteSpace: 'nowrap', textShadow: '0 0 8px #0ff' }}>EVADE!</div>
+              </div>
+            )}
+            {disableFlashes.p2 && (
+              <div key={`p2disable-${disableFlashes.key}`} className="crit-overlay">
+                <div style={{ fontSize: 38, color: '#f90', fontWeight: 'bold', lineHeight: 1, textShadow: '0 0 20px #f80, 0 0 40px #f804' }}>{disableFlashes.p2}</div>
+                <div style={{ fontSize: 11, color: '#f90', fontWeight: 'bold', letterSpacing: 2, whiteSpace: 'nowrap', textShadow: '0 0 8px #f80' }}>MOVE DISABLED!</div>
               </div>
             )}
           </div>
@@ -1320,7 +1453,6 @@ export default function GameBoard() {
           <div style={{ minHeight: 14, marginTop: 2, textAlign: 'right' }}>
             {statUpFlashes.p2ke && <div key={`p2ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p2nb && <div key={`p2nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
-            {evadeFlashes.p2 && <div key={`p2evade-${evadeFlashes.key}`} className="evade-flash">EVADE!</div>}
           </div>
         </div>
       </div>
@@ -1330,6 +1462,33 @@ export default function GameBoard() {
         {activeEffect && activeEffect.type !== 'announce' && renderEffectBanner(activeEffect)}
       </div>
 
+      {/* ULT condition wheels — shows progress toward all 3 unlock requirements */}
+      {!gameOver && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'flex-end', justifyContent: 'center' }}>
+          <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
+          <UltConditionWheel
+            done={!!myPlayer.ultReadAchieved}
+            label="READ"
+            accent={myAccent}
+            ready={myPlayer.ultimateReady}
+            tip={{ name: 'Good Read', description: 'Toggle Read and win the clash. Achieved once — sticks until you fire your Ultimate.', unlock: 'Activate Read, then win the clash that turn.' }}
+          />
+          <UltConditionWheel
+            done={!!myPlayer.ultChainAchieved}
+            label="CHAIN"
+            accent={myAccent}
+            ready={myPlayer.ultimateReady}
+            tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read. The damage buff threshold is lower — this tracks chains of 3+. Sticks until ULT fires.', unlock: 'Reach a chain of 3 on AT or SP.' }}
+          />
+          <UltConditionWheel
+            done={!!(myPlayer.cycleLit?.AT && myPlayer.cycleLit?.BL && myPlayer.cycleLit?.SP)}
+            label="LIT"
+            accent={myAccent}
+            ready={myPlayer.ultimateReady}
+            tip={{ name: 'All Moves Lit', description: 'Win at least once with each of AT, BL, and SP across completed 3-move cycles. Each completed cycle can light one move per win.', unlock: 'Win with all three moves across separate cycles.' }}
+          />
+        </div>
+      )}
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         {MOVES.map(move => (
           <button
@@ -1342,13 +1501,15 @@ export default function GameBoard() {
           </button>
         ))}
         {myPlayer.ultimateReady && !gameOver && (
-          <button
-            onClick={isOnline ? handleOnlineUlt : handleUlt}
-            disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-            style={{ background: myPlayer.hasMourne ? '#7020c0' : '#1a0008', color: myPlayer.hasMourne ? '#e0b0ff' : '#cc2244', fontWeight: 'bold', border: `1px solid ${myPlayer.hasMourne ? 'transparent' : '#cc2244'}`, padding: '2px 10px', cursor: 'pointer', letterSpacing: 1 }}
-          >
-            {myPlayer.hasMourne ? 'COLLAPSE' : myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
-          </button>
+          <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
+            <button
+              onClick={isOnline ? handleOnlineUlt : handleUlt}
+              disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+              style={{ background: myPlayer.hasMourne ? '#7020c0' : '#1a0008', color: myPlayer.hasMourne ? '#e0b0ff' : '#cc2244', fontWeight: 'bold', border: `1px solid ${myPlayer.hasMourne ? 'transparent' : '#cc2244'}`, padding: '2px 10px', cursor: 'pointer', letterSpacing: 1 }}
+            >
+              {myPlayer.hasMourne ? 'COLLAPSE' : myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
+            </button>
+          </TooltipWrap>
         )}
         {/* Bloodletter — Cairan only */}
         {myPlayer.bloodletterUnlocked && !gameOver && (
