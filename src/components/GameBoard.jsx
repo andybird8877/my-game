@@ -949,7 +949,7 @@ export default function GameBoard() {
   return (
     <>
     {ultAnimating && <div className="ult-screen-overlay" />}
-    {ultAnimating && <div className="ult-text">ASSASSINATE</div>}
+    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}</div>}
     {collapseAnimating && <div className="collapse-overlay" />}
     {collapseAnimating && <div className="collapse-title">COLLAPSE</div>}
     {collapseAnimating && collapseData && (
@@ -1289,7 +1289,7 @@ export default function GameBoard() {
             disabled={animating || ultAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
             style={{ background: myPlayer.hasMourne ? '#7020c0' : '#1a0008', color: myPlayer.hasMourne ? '#e0b0ff' : '#cc2244', fontWeight: 'bold', border: `1px solid ${myPlayer.hasMourne ? 'transparent' : '#cc2244'}`, padding: '2px 10px', cursor: 'pointer', letterSpacing: 1 }}
           >
-            {myPlayer.hasMourne ? 'COLLAPSE' : 'ASSASSINATE'}
+            {myPlayer.hasMourne ? 'COLLAPSE' : myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
           </button>
         )}
         {/* Bloodletter — Cairan only */}

@@ -482,7 +482,7 @@ export function resolveBeforeTurn(gameState) {
     if (!player.vaelRegenUnlocked || player.hp <= 0) continue
     const maxHp   = player.maxHp ?? 1
     const hpPct   = Math.min(95, Math.max(5, (player.hp / maxHp) * 100))
-    const healPct = 25 - (hpPct - 5) * (24 / 90)
+    const healPct = 12.5 - (hpPct - 5) * (11.5 / 90)
     const heal    = Math.floor((healPct / 100) * maxHp)
     if (heal <= 0) continue
     const newHp = Math.min(maxHp, player.hp + heal)
@@ -610,9 +610,11 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (turnResult.outcome === 'AT_WINS_CLEAN' || turnResult.outcome === 'SP_WINS_CLEAN') {
     const winnerRead = turnResult.winner === 'p1' ? p1Read : p2Read
     if (winnerRead === 'none' || winnerRead === 'good') {
-      const winnerCrit = turnResult.winner === 'p1' ? p1EffCritChance : p2EffCritChance
+      const baseCrit   = turnResult.winner === 'p1' ? p1EffCritChance : p2EffCritChance
+      // Toggled good read (readActive + win) doubles crit chance, capped at 100%
+      const winnerCrit = winnerRead === 'good' ? Math.min(1, (baseCrit ?? 0) * 2) : (baseCrit ?? 0)
       const forceCrit  = turnResult.winner === 'p1' && !!options.p1ForceCrit
-      if (forceCrit || Math.random() < (winnerCrit ?? 0)) {
+      if (forceCrit || Math.random() < winnerCrit) {
         if (turnResult.winner === 'p1') { finalP2Damage *= 2; p1CritHit = true }
         else                            { finalP1Damage *= 2; p2CritHit = true }
       }
@@ -641,6 +643,17 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   }
   if (!isBLTie && newP2.nimbleUnlocked && finalP2Damage > 0 && Math.random() < (newP2.nimbleChance ?? 0)) {
     finalP2Damage = 0; p2NimbleTriggered = true
+  }
+
+  // ── Vael Solace: base evade (20%) ────────────────────────────────────────
+  const VAEL_EVADE_CHANCE = 0.20
+  let p1VaelEvaded = false
+  let p2VaelEvaded = false
+  if (newP1.hasVael && finalP1Damage > 0 && Math.random() < VAEL_EVADE_CHANCE) {
+    finalP1Damage = 0; p1VaelEvaded = true
+  }
+  if (newP2.hasVael && finalP2Damage > 0 && Math.random() < VAEL_EVADE_CHANCE) {
+    finalP2Damage = 0; p2VaelEvaded = true
   }
 
   // ── Lit BL: negate chip punishment in BL_CHIP only (not SP wins) ─────────
@@ -818,7 +831,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   // vaelRegenUnlocked: permanently true once counter reaches 3.
   // Once unlocked, heals Vael every turn after damage — amount scales inversely
   // with current HP% (more effective when low, minimal when near full).
-  // Formula: clamp HP% to [5,95], healPct = 25 − (clampedHPPct − 5)×(24/90),
+  // Formula: clamp HP% to [5,95], healPct = 12.5 − (clampedHPPct − 5)×(11.5/90),
   //          heal = floor(healPct/100 × maxHP), capped at maxHP.
   let p1VaelNormalGoodReads  = newP1.vaelNormalGoodReads  ?? 0
   let p2VaelNormalGoodReads  = newP2.vaelNormalGoodReads  ?? 0
@@ -867,6 +880,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2FlowBroken:    p2FlowNow  && !newP2.flowState,
     p1NimbleTriggered,
     p2NimbleTriggered,
+    p1VaelEvaded,
+    p2VaelEvaded,
     p1UsedBloodletter: p1BloodletterFired,
     p2UsedBloodletter: p2BloodletterFired,
     p1NewUnlocks: [...p1CairanUnlocks, ...p1MourneUnlocks],
