@@ -157,7 +157,7 @@ function AbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
   const stroke  = unlocked ? '#ff4060' : '#c02030'
   return (
     <div
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
       onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
       onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
@@ -194,7 +194,7 @@ function MourneAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
   const stroke  = unlocked ? '#c890ff' : '#b06cff'
   return (
     <div
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
       onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
       onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
@@ -233,7 +233,7 @@ function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
   const stroke  = unlocked ? accent : '#007799'
   return (
     <div
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
       onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
       onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
@@ -667,7 +667,7 @@ export default function GameBoard() {
     if (gameMode === null) {
       return (
         <div style={{ maxWidth: 380, margin: '100px auto', fontFamily: 'monospace', color: '#fff', textAlign: 'center', padding: '0 16px' }}>
-          <h1 style={{ fontSize: 34, letterSpacing: 6, marginBottom: 60, color: '#ff0', textShadow: '0 0 24px #f804' }}>COMBAT</h1>
+          <img src="/countercycle-logo.png" alt="Countercycle" style={{ maxWidth: 320, width: '100%', marginBottom: 60, display: 'block', margin: '0 auto 60px' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <button onClick={() => setGameMode('offline')}
               style={{ padding: '16px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #555', color: '#ccc', cursor: 'pointer' }}>
@@ -1198,7 +1198,7 @@ export default function GameBoard() {
               const moveDisabled = gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move
               return (
                 <TooltipWrap key={move} tip={cycleTip(move, state.p1)} unlocked={true}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <div
                       onClick={isP1Controllable && !moveDisabled ? () => isOnline ? handleOnlineMove(move) : handleMove(move) : undefined}
                       style={{
@@ -1225,6 +1225,37 @@ export default function GameBoard() {
               )
             })}
           </div>
+          {/* Read toggle — circular, below cycle circles, flush left */}
+          {!gameOver && (() => {
+            const readDisabled = animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)
+            const isP1Controllable = !isOnline || online.myIndex === 0
+            if (!isP1Controllable) return null
+            return (
+              <div style={{ display: 'flex', marginTop: 6 }}>
+                <div style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div
+                    onClick={!readDisabled ? () => setP1ReadActive(r => !r) : undefined}
+                    style={{
+                      width: '100%', aspectRatio: '1', borderRadius: '50%',
+                      backgroundColor: p1ReadActive ? '#6b3200' : '#111',
+                      border: `2px ${p1ReadActive ? 'solid' : 'dashed'} #f80`,
+                      boxShadow: p1ReadActive ? '0 0 10px #f804, inset 0 0 10px #f802' : 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
+                      fontSize: 9, fontWeight: 'bold',
+                      color: p1ReadActive ? '#ffb347' : '#f806',
+                      textAlign: 'center', lineHeight: 1.2,
+                      cursor: readDisabled ? 'not-allowed' : 'pointer',
+                      opacity: readDisabled ? 0.45 : 1,
+                      userSelect: 'none',
+                    }}
+                  >
+                    READ
+                    <span style={{ fontSize: 13, lineHeight: 1, marginTop: 2 }}>{p1ReadActive ? '◉' : '○'}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
           {state.p1.hasDodge && state.p1.dodgeStreak > 0 && (
             <div style={{ fontSize: 10, color: '#7df', marginTop: 4 }}>
               DODGE ×{state.p1.dodgeStreak}
@@ -1288,9 +1319,9 @@ export default function GameBoard() {
           )}
           {/* Ability progress wheels — Vael Solace */}
           {state.p1.hasVael && (
-            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, justifyContent: 'center' }}>
-              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p1.vaelDisablesLanded}  unlocked={state.p1.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} /></div>
-              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p1.vaelNormalGoodReads} unlocked={state.p1.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} /></div>
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+              <VaelAbilityWheel count={state.p1.vaelDisablesLanded}  unlocked={state.p1.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
+              <VaelAbilityWheel count={state.p1.vaelNormalGoodReads} unlocked={state.p1.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
             </div>
           )}
           {/* Stat-up flashes */}
@@ -1379,7 +1410,7 @@ export default function GameBoard() {
               const moveDisabled = gameOver || animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove) || myPlayer.disabledMove === move
               return (
                 <TooltipWrap key={move} tip={cycleTip(move, state.p2)} unlocked={true}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <div
                       onClick={isP2Controllable && !moveDisabled ? () => handleOnlineMove(move) : undefined}
                       style={{
@@ -1470,9 +1501,9 @@ export default function GameBoard() {
           )}
           {/* Ability progress wheels — Vael Solace P2 */}
           {state.p2.hasVael && (
-            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto', justifyContent: 'center' }}>
-              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p2.vaelDisablesLanded}  unlocked={state.p2.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} /></div>
-              <div style={{ width: 88 }}><VaelAbilityWheel count={state.p2.vaelNormalGoodReads} unlocked={state.p2.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} /></div>
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+              <VaelAbilityWheel count={state.p2.vaelDisablesLanded}  unlocked={state.p2.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
+              <VaelAbilityWheel count={state.p2.vaelNormalGoodReads} unlocked={state.p2.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
             </div>
           )}
           {/* Stat-up flashes */}
@@ -1499,26 +1530,6 @@ export default function GameBoard() {
         {activeEffect && activeEffect.type !== 'announce' && renderEffectBanner(activeEffect)}
       </div>
 
-      {!gameOver && (
-        <div style={{ display: 'flex', marginBottom: 6 }}>
-          <button
-            onClick={() => setP1ReadActive(r => !r)}
-            disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-            style={{
-              background: p1ReadActive ? '#7a4800' : 'transparent',
-              color: p1ReadActive ? '#ffb347' : '#f80',
-              border: `1px ${p1ReadActive ? 'solid' : 'dashed'} #f80`,
-              fontWeight: 'bold',
-              fontSize: 10,
-              cursor: 'pointer',
-              padding: '2px 10px',
-              letterSpacing: 1,
-            }}
-          >
-            READ {p1ReadActive ? '●' : '○'}
-          </button>
-        </div>
-      )}
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         {myPlayer.ultimateReady && !gameOver && (
           <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
