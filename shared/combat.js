@@ -99,7 +99,7 @@ export function createInitialState(p1Char = null, p2Char = null) {
     hasDodge: !!hasDodge, dodgeStreak: 0,
     atChain: 0, spChain: 0, atDmgBuff: 0, spDmgBuff: 0,
     cycleSet: [], cycleLit: {}, litMoves: { at: false, bl: false, sp: false },
-    ultReadAchieved: false, ultChainAchieved: false,
+    ultReadAchieved: false, ultChainAchieved: false, ultGoodReads: 0,
     pendingLifesteal: 0,
     ultimateReady: false, flowState: false,
     consecutiveGoodReads: 0, bleeds: [],
@@ -278,6 +278,7 @@ export function processCollapse(gameState, ultUser) {
       cycleSet: [],
       litMoves: { at: false, bl: false, sp: false },
       ultReadAchieved: false,
+      ultGoodReads: 0,
       ultChainAchieved: false,
     },
     [defenderKey]: { ...defender, hp: newDefenderHp },
@@ -321,6 +322,7 @@ function processVaelUlt(gameState, ultUser) {
       cycleSet: [],
       litMoves: { at: false, bl: false, sp: false },
       ultReadAchieved: false,
+      ultGoodReads: 0,
       ultChainAchieved: false,
       vaelDisablesLanded: 0,
     },
@@ -366,6 +368,7 @@ export function processUlt(gameState, ultUser) {
       cycleSet: [],
       litMoves: { at: false, bl: false, sp: false },
       ultReadAchieved: false,
+      ultGoodReads: 0,
       ultChainAchieved: false,
     },
     [defenderKey]: { ...defender, hp: newDefenderHp },
@@ -533,8 +536,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const newP2 = { ...updateChains(gameState.p2, p2Move, p2ReadActive), ...updateCycle(gameState.p2, p2Move, p2ReadActive), ...p2FlowUpdate }
 
   // ── Ultimate unlock: three sticky conditions (all must be achieved) ────────
-  const p1UltReadAchieved  = (newP1.ultReadAchieved  ?? false) || (p1ReadActive && p1Read === 'good')
-  const p2UltReadAchieved  = (newP2.ultReadAchieved  ?? false) || (p2ReadActive && p2Read === 'good')
+  const p1UltGoodReads     = Math.min(2, (newP1.ultGoodReads ?? 0) + (p1ReadActive && p1Read === 'good' ? 1 : 0))
+  const p2UltGoodReads     = Math.min(2, (newP2.ultGoodReads ?? 0) + (p2ReadActive && p2Read === 'good' ? 1 : 0))
+  const p1UltReadAchieved  = p1UltGoodReads >= 2
+  const p2UltReadAchieved  = p2UltGoodReads >= 2
   const p1UltChainAchieved = (newP1.ultChainAchieved ?? false) || newP1.atChain >= 3 || newP1.spChain >= 3
   const p2UltChainAchieved = (newP2.ultChainAchieved ?? false) || newP2.atChain >= 3 || newP2.spChain >= 3
   const p1AllLit = !!(newP1.cycleLit?.AT && newP1.cycleLit?.BL && newP1.cycleLit?.SP)
@@ -949,6 +954,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       vaelToggledGoodReads: p1VaelToggledGoodReads,
       vaelRegenUnlocked: p1RegenUnlocked,
       ultReadAchieved: p1UltReadAchieved,
+      ultGoodReads: p1UltGoodReads,
       ultChainAchieved: p1UltChainAchieved,
       ultimateReady: p1UltimateReady,
     },
@@ -964,6 +970,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       vaelToggledGoodReads: p2VaelToggledGoodReads,
       vaelRegenUnlocked: p2RegenUnlocked,
       ultReadAchieved: p2UltReadAchieved,
+      ultGoodReads: p2UltGoodReads,
       ultChainAchieved: p2UltChainAchieved,
       ultimateReady: p2UltimateReady,
     },

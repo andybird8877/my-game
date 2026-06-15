@@ -1337,7 +1337,7 @@ export default function GameBoard() {
               <UltConditionWheel done={!!state.p1.ultChainAchieved} label="CHAIN" accent={p1Accent} ready={state.p1.ultimateReady}
                 tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read.', unlock: 'Reach a chain of 3 on AT or SP.' }} />
               <UltConditionWheel done={!!(state.p1.cycleLit?.AT && state.p1.cycleLit?.BL && state.p1.cycleLit?.SP)} label="LIT" accent={p1Accent} ready={state.p1.ultimateReady}
-                tip={{ name: 'All Moves Lit', description: 'Win at least once with each of AT, BL, and SP across completed 3-move cycles.', unlock: 'Win with all three moves across separate cycles.' }} />
+                tip={{ name: 'All Moves Lit', description: 'Play each of AT, BL, and SP with Read off to complete a 3-move cycle — you do not need to win the clash. Completing a cycle then lights the next move you play.', unlock: 'Use all three moves (Read off) across a cycle.' }} />
             </div>
           )}
         </div>
@@ -1518,7 +1518,7 @@ export default function GameBoard() {
               <UltConditionWheel done={!!state.p2.ultChainAchieved} label="CHAIN" accent={p2Accent} ready={state.p2.ultimateReady}
                 tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read.', unlock: 'Reach a chain of 3 on AT or SP.' }} />
               <UltConditionWheel done={!!(state.p2.cycleLit?.AT && state.p2.cycleLit?.BL && state.p2.cycleLit?.SP)} label="LIT" accent={p2Accent} ready={state.p2.ultimateReady}
-                tip={{ name: 'All Moves Lit', description: 'Win at least once with each of AT, BL, and SP across completed 3-move cycles.', unlock: 'Win with all three moves across separate cycles.' }} />
+                tip={{ name: 'All Moves Lit', description: 'Play each of AT, BL, and SP with Read off to complete a 3-move cycle — you do not need to win the clash. Completing a cycle then lights the next move you play.', unlock: 'Use all three moves (Read off) across a cycle.' }} />
               <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
             </div>
           )}
