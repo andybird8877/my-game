@@ -260,51 +260,98 @@ function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
   )
 }
 
-// ─── Ult Condition Wheel ──────────────────────────────────────────────────────
-// Binary progress ring — lit when condition is met, glows+pulses when ultimateReady
+// ─── Ult Meter ────────────────────────────────────────────────────────────────
+// Single progress ring showing combined ULT unlock progress across all 3 conditions
 
-function UltConditionWheel({ done, label, accent, tip, ready }) {
+function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
   const [show, setShow] = useState(false)
   const [pos,  setPos]  = useState({ x: 0, y: 0 })
   const timer = useRef(null)
-  const r = 20, cx = 24, cy = 24
+  const r = 30, cx = 40, cy = 40
   const circumference = 2 * Math.PI * r
-  const dimAccent = accent + '88'
+
+  const goodReadsCount = Math.min(2, ultGoodReads ?? 0)
+  const chainCount     = ultChainAchieved ? 1 : 0
+  const litCount       = ['AT', 'BL', 'SP'].filter(m => cycleLit?.[m]).length
+  const segmentsMet    = goodReadsCount + chainCount + litCount  // 0–6
+
+  const fillLen     = ready ? circumference : (circumference * segmentsMet / 6)
+  const strokeColor = ready ? accent : (segmentsMet > 0 ? accent + 'aa' : '#444')
+
+  const conditions = [
+    {
+      label:  `Good Reads ${goodReadsCount}/2`,
+      done:   goodReadsCount >= 2,
+      detail: 'Toggle Read on and win the clash twice. Does not need to be consecutive.',
+    },
+    {
+      label:  'Power Chain',
+      done:   !!ultChainAchieved,
+      detail: 'Play AT or SP three times in a row with Read off.',
+    },
+    {
+      label:  `Cycle Lit ${litCount}/3`,
+      done:   litCount >= 3,
+      detail: 'Play each of AT, BL, and SP with Read off to light them. You do not need to win the clash.',
+    },
+  ]
 
   return (
     <div
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default', width: 52 }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
       onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
       onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
     >
-      <svg viewBox="0 0 48 48" style={{ width: 48, height: 48 }}>
+      <svg viewBox="0 0 80 80" style={{ width: 64, height: 64 }}>
         {/* Track */}
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#2a2a2a" strokeWidth={3} />
-        {/* Fill ring */}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#2a2a2a" strokeWidth={4} />
+        {/* Fill arc */}
         <circle
           cx={cx} cy={cy} r={r} fill="none"
-          stroke={done ? accent : '#333'}
-          strokeWidth={done ? 4 : 2}
-          strokeDasharray={done ? `${circumference} 0` : `${circumference * 0.12} ${circumference * 0.88}`}
+          stroke={strokeColor}
+          strokeWidth={4}
+          strokeDasharray={`${fillLen} ${circumference}`}
+          strokeLinecap="butt"
           transform={`rotate(-90 ${cx} ${cy})`}
-          style={done ? {
-            filter: `drop-shadow(0 0 ${ready ? 6 : 3}px ${accent})`,
+          style={{
+            filter: ready ? `drop-shadow(0 0 6px ${accent})` : segmentsMet > 0 ? `drop-shadow(0 0 3px ${accent}88)` : 'none',
             animation: ready ? 'ultPulse 1.1s ease-in-out infinite' : undefined,
-          } : undefined}
+          }}
         />
-        {/* Center glyph */}
-        {done
-          ? <text x={cx} y={cy + 5} textAnchor="middle" fontSize={15} fill={accent} fontWeight="bold"
-              style={ready ? { animation: 'ultPulse 1.1s ease-in-out infinite' } : undefined}>✓</text>
-          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={9} fill="#3a3a3a">○○○</text>
+        {/* Centre */}
+        {ready
+          ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold"
+              style={{ animation: 'ultPulse 1.1s ease-in-out infinite' }}>✓</text>
+          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={12} fill={segmentsMet > 0 ? '#aaa' : '#444'}>{segmentsMet}/6</text>
         }
       </svg>
       <div style={{
-        fontSize: 8, letterSpacing: 0.5, textAlign: 'center', marginTop: 1,
-        color: done ? accent : '#3a3a3a', fontWeight: done ? 'bold' : 'normal',
-      }}>{label}</div>
-      {show && tip && <TooltipBox {...tip} unlocked={done} x={pos.x} y={pos.y} />}
+        fontSize: 8, letterSpacing: 1, textAlign: 'center', marginTop: 2,
+        color: ready ? accent : '#444', fontWeight: ready ? 'bold' : 'normal',
+        userSelect: 'none',
+      }}>ULT</div>
+      {show && (
+        <div style={{
+          position: 'fixed',
+          left: Math.min(pos.x + 14, window.innerWidth - 290),
+          top: pos.y - 8,
+          width: 268, zIndex: 9999, pointerEvents: 'none',
+          background: '#111', border: '1px solid #444', borderRadius: 4,
+          padding: '8px 10px', fontFamily: 'monospace', fontSize: 11,
+          color: '#fff', lineHeight: 1.5,
+          boxShadow: '0 4px 14px rgba(0,0,0,0.85)',
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 6, color: '#ff0', letterSpacing: 0.5 }}>ULT CONDITIONS</div>
+          {conditions.map(({ label, done, detail }) => (
+            <div key={label} style={{ marginBottom: 5 }}>
+              <span style={{ color: done ? '#4f4' : '#666' }}>{done ? '✓' : '○'} </span>
+              <span style={{ color: done ? '#ccc' : '#777', fontWeight: done ? 'bold' : 'normal' }}>{label}</span>
+              <div style={{ color: '#555', fontSize: 10, marginLeft: 14, marginTop: 1 }}>{detail}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1330,14 +1377,14 @@ export default function GameBoard() {
             {statUpFlashes.p1nb && <div key={`p1nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
           </div>
           {!gameOver && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
-              <UltConditionWheel done={!!state.p1.ultReadAchieved} label="READ" accent={p1Accent} ready={state.p1.ultimateReady}
-                tip={{ name: 'Good Read', description: 'Toggle Read and win the clash. Sticks until ULT fires.', unlock: 'Activate Read, then win the clash that turn.' }} />
-              <UltConditionWheel done={!!state.p1.ultChainAchieved} label="CHAIN" accent={p1Accent} ready={state.p1.ultimateReady}
-                tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read.', unlock: 'Reach a chain of 3 on AT or SP.' }} />
-              <UltConditionWheel done={!!(state.p1.cycleLit?.AT && state.p1.cycleLit?.BL && state.p1.cycleLit?.SP)} label="LIT" accent={p1Accent} ready={state.p1.ultimateReady}
-                tip={{ name: 'All Moves Lit', description: 'Play each of AT, BL, and SP with Read off to complete a 3-move cycle — you do not need to win the clash. Completing a cycle then lights the next move you play.', unlock: 'Use all three moves (Read off) across a cycle.' }} />
+            <div style={{ marginTop: 6 }}>
+              <UltMeter
+                accent={p1Accent}
+                ready={state.p1.ultimateReady}
+                ultGoodReads={state.p1.ultGoodReads ?? 0}
+                ultChainAchieved={!!state.p1.ultChainAchieved}
+                cycleLit={state.p1.cycleLit}
+              />
             </div>
           )}
         </div>
@@ -1512,14 +1559,14 @@ export default function GameBoard() {
             {statUpFlashes.p2nb && <div key={`p2nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
           </div>
           {!gameOver && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'flex-end', justifyContent: 'flex-end' }}>
-              <UltConditionWheel done={!!state.p2.ultReadAchieved} label="READ" accent={p2Accent} ready={state.p2.ultimateReady}
-                tip={{ name: 'Good Read', description: 'Toggle Read and win the clash. Sticks until ULT fires.', unlock: 'Activate Read, then win the clash that turn.' }} />
-              <UltConditionWheel done={!!state.p2.ultChainAchieved} label="CHAIN" accent={p2Accent} ready={state.p2.ultimateReady}
-                tip={{ name: 'Chain 3+', description: 'Use AT or SP three or more consecutive times without toggling Read.', unlock: 'Reach a chain of 3 on AT or SP.' }} />
-              <UltConditionWheel done={!!(state.p2.cycleLit?.AT && state.p2.cycleLit?.BL && state.p2.cycleLit?.SP)} label="LIT" accent={p2Accent} ready={state.p2.ultimateReady}
-                tip={{ name: 'All Moves Lit', description: 'Play each of AT, BL, and SP with Read off to complete a 3-move cycle — you do not need to win the clash. Completing a cycle then lights the next move you play.', unlock: 'Use all three moves (Read off) across a cycle.' }} />
-              <span style={{ fontSize: 8, color: '#444', letterSpacing: 1, marginBottom: 8, userSelect: 'none' }}>ULT</span>
+            <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
+              <UltMeter
+                accent={p2Accent}
+                ready={state.p2.ultimateReady}
+                ultGoodReads={state.p2.ultGoodReads ?? 0}
+                ultChainAchieved={!!state.p2.ultChainAchieved}
+                cycleLit={state.p2.cycleLit}
+              />
             </div>
           )}
         </div>
