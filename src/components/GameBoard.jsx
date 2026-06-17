@@ -23,6 +23,7 @@ const TIPS = {
   moveFF:      { name: 'Force Field',  description: 'Mourne\'s defensive barrier. Absorbs chip damage into the Force Field accumulator instead of taking HP loss. When the accumulator reaches 10, the stored energy fires back at the opponent.' },
   vaelJinx:   { name: 'JINX',        description: 'After unlocking, any Good Clash (without Read active) also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',              unlock: 'Land SP disable 2 times.' },
   vaelRegen:  { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 Good Clashes (without Read active).' },
+  vaelEvade:  { name: 'Evade',       description: 'Unlocks after 3 committed Read-toggle wins. Once unlocked, evade chance scales with remaining HP, from 5% at full health up to 25% near death.',                                        unlock: 'Land 3 Good Reads (with Read active).' },
 }
 
 // ─── Tooltip UI ───────────────────────────────────────────────────────────────
@@ -1405,8 +1406,9 @@ export default function GameBoard() {
           {/* Ability progress wheels — Vael Solace */}
           {state.p1.hasVael && (
             <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
-              <VaelAbilityWheel count={state.p1.vaelDisablesLanded}  unlocked={state.p1.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
-              <VaelAbilityWheel count={state.p1.vaelNormalGoodReads} unlocked={state.p1.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+              <VaelAbilityWheel count={state.p1.vaelDisablesLanded}   unlocked={state.p1.jinxUnlocked}       label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
+              <VaelAbilityWheel count={state.p1.vaelNormalGoodReads}  unlocked={state.p1.vaelRegenUnlocked}  label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+              <VaelAbilityWheel count={state.p1.vaelToggledGoodReads} unlocked={state.p1.vaelEvadeUnlocked}  label="Evade" maxCount={3} tip={TIPS.vaelEvade} />
             </div>
           )}
           {/* Stat-up flashes */}
@@ -1587,8 +1589,9 @@ export default function GameBoard() {
           {/* Ability progress wheels — Vael Solace P2 */}
           {state.p2.hasVael && (
             <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
-              <VaelAbilityWheel count={state.p2.vaelDisablesLanded}  unlocked={state.p2.jinxUnlocked}      label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
-              <VaelAbilityWheel count={state.p2.vaelNormalGoodReads} unlocked={state.p2.vaelRegenUnlocked} label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+              <VaelAbilityWheel count={state.p2.vaelDisablesLanded}   unlocked={state.p2.jinxUnlocked}       label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
+              <VaelAbilityWheel count={state.p2.vaelNormalGoodReads}  unlocked={state.p2.vaelRegenUnlocked}  label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
+              <VaelAbilityWheel count={state.p2.vaelToggledGoodReads} unlocked={state.p2.vaelEvadeUnlocked}  label="Evade" maxCount={3} tip={TIPS.vaelEvade} />
             </div>
           )}
           {/* Stat-up flashes */}

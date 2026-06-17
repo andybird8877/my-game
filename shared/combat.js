@@ -92,7 +92,7 @@ export function calculateDamage({ outcome, loser, winner, p1Move, p2Move, p1Read
 export function createInitialState(p1Char = null, p2Char = null) {
   const p1Hp = p1Char?.hp ?? 300
   const p2Hp = p2Char?.hp ?? 300
-  const makePlayer = (hp, baseAtDamage, baseSpDamage, critChance, hasDodge, hasMourne, hasVael, weight, cls) => ({
+  const makePlayer = (hp, baseAtDamage, baseSpDamage, critChance, hasDodge, hasMourne, hasVael, hasWrack, weight, cls) => ({
     hp, maxHp: hp, baseAtDamage, baseSpDamage, critChance,
     weight: weight ?? 'medium',
     class:  cls    ?? 'warrior',
@@ -102,7 +102,7 @@ export function createInitialState(p1Char = null, p2Char = null) {
     ultReadAchieved: false, ultChainAchieved: false, ultGoodReads: 0,
     pendingLifesteal: 0,
     ultimateReady: false, flowState: false,
-    consecutiveGoodReads: 0, bleeds: [],
+    consecutiveGoodReads: 0, bleeds: [], poison: 0,
     // Cairan ability trackers (all players carry these; only used when hasDodge)
     damageDealtCount: 0, successfulDodgeCount: 0, critHitsDealt: 0,
     keenEyeUnlocked: false, nimbleUnlocked: false, bloodletterUnlocked: false,
@@ -126,10 +126,13 @@ export function createInitialState(p1Char = null, p2Char = null) {
     vaelNormalGoodReads: 0,
     vaelToggledGoodReads: 0,
     vaelRegenUnlocked: false,
+    vaelEvadeUnlocked: false,
+    // Wrack ability trackers (all players carry these; only used when hasWrack)
+    hasWrack: !!hasWrack,
   })
   return {
-    p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.weight, p1Char?.class),
-    p2: makePlayer(p2Hp, p2Char?.atDamage ?? AT_DAMAGE, p2Char?.spDamage ?? SP_DAMAGE, p2Char?.critChance ?? 0, p2Char?.hasDodge, p2Char?.hasMourne, p2Char?.hasVael, p2Char?.weight, p2Char?.class),
+    p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.hasWrack, p1Char?.weight, p1Char?.class),
+    p2: makePlayer(p2Hp, p2Char?.atDamage ?? AT_DAMAGE, p2Char?.spDamage ?? SP_DAMAGE, p2Char?.critChance ?? 0, p2Char?.hasDodge, p2Char?.hasMourne, p2Char?.hasVael, p2Char?.hasWrack, p2Char?.weight, p2Char?.class),
     p1Character: p1Char,
     p2Character: p2Char,
     lastTurn: null,
@@ -414,6 +417,24 @@ export function resolveBeforeTurn(gameState) {
     })
   }
 
+  // ── Poison (Wrack's Rot) ──────────────────────────────────────────────────
+  // Ticks for damage equal to the current value, then decrements by 1.
+  // Clears automatically once it reaches 0. Stacking when reapplied is handled
+  // in processTurn, not here.
+  for (const playerKey of ['p1', 'p2']) {
+    const poison = state[playerKey].poison ?? 0
+    if (poison <= 0) continue
+    state = {
+      ...state,
+      [playerKey]: {
+        ...state[playerKey],
+        hp: Math.max(0, state[playerKey].hp - poison),
+        poison: poison - 1,
+      },
+    }
+    steps.push({ player: playerKey, type: 'poison', damage: poison, stateAfter: state })
+  }
+
   // ── Mourne between-turns effects ──────────────────────────────────────────
   // Order per spec: FF payback, self-damage, Siphon, Leech (per player)
   const pendingMourneUnlocks = []  // { name, playerKey } — announced after all effects
@@ -689,14 +710,17 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     finalP2Damage = 0; p2NimbleTriggered = true
   }
 
-  // ── Vael Solace: base evade (20%) ────────────────────────────────────────
-  const VAEL_EVADE_CHANCE = 0.20
+  // ── Vael Solace: Evade (HP-scaled, requires vaelEvadeUnlocked) ───────────
+  const vaelEvadeChance = (hp, maxHp) => {
+    const mx = Math.max(maxHp, 2)
+    return Math.min(0.25, Math.max(0.05, 0.05 + (mx - hp) / (mx - 1) * 0.20))
+  }
   let p1VaelEvaded = false
   let p2VaelEvaded = false
-  if (newP1.hasVael && finalP1Damage > 0 && Math.random() < VAEL_EVADE_CHANCE) {
+  if (newP1.hasVael && newP1.vaelEvadeUnlocked && finalP1Damage > 0 && Math.random() < vaelEvadeChance(newP1.hp, newP1.maxHp)) {
     finalP1Damage = 0; p1VaelEvaded = true
   }
-  if (newP2.hasVael && finalP2Damage > 0 && Math.random() < VAEL_EVADE_CHANCE) {
+  if (newP2.hasVael && newP2.vaelEvadeUnlocked && finalP2Damage > 0 && Math.random() < vaelEvadeChance(newP2.hp, newP2.maxHp)) {
     finalP2Damage = 0; p2VaelEvaded = true
   }
 
@@ -704,6 +728,18 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (turnResult.outcome === 'BL_CHIP') {
     if (p1Move === 'BL' && p1LitMoves.bl && p1Read !== 'good' && finalP1Damage > 0) finalP1Damage = 0
     if (p2Move === 'BL' && p2LitMoves.bl && p2Read !== 'good' && finalP2Damage > 0) finalP2Damage = 0
+  }
+
+  // ── Wrack: Rot (poison) application + cleanse ────────────────────────────────
+  // A Good Read landed by the poisoned player cleanses their own poison entirely.
+  // Wrack mirrors the chip damage it just took as poison onto the opponent —
+  // this does NOT zero out finalP1Damage/finalP2Damage; Wrack still takes
+  // the chip damage normally, it just also curses the opponent in response.
+  let p1Poison = p1Read === 'good' ? 0 : (newP1.poison ?? 0)
+  let p2Poison = p2Read === 'good' ? 0 : (newP2.poison ?? 0)
+  if (turnResult.outcome === 'BL_CHIP') {
+    if (newP1.hasWrack && p1Move === 'BL' && finalP1Damage > 0) { p2Poison += finalP1Damage }
+    if (newP2.hasWrack && p2Move === 'BL' && finalP2Damage > 0) { p1Poison += finalP2Damage }
   }
 
   // ── Force Field (Mourne) — chip absorption ────────────────────────────────
@@ -901,6 +937,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (newP1.hasVael && p1Read === 'good') p1VaelToggledGoodReads++
   if (newP2.hasVael && p2Read === 'good') p2VaelToggledGoodReads++
 
+  const p1VaelEvadeUnlocked = (newP1.vaelEvadeUnlocked ?? false) || (newP1.hasVael && p1VaelToggledGoodReads >= 3)
+  const p2VaelEvadeUnlocked = (newP2.vaelEvadeUnlocked ?? false) || (newP2.hasVael && p2VaelToggledGoodReads >= 3)
+
   const p1RegenUnlocked = (newP1.vaelRegenUnlocked ?? false) || (newP1.hasVael && p1VaelNormalGoodReads >= 3)
   const p2RegenUnlocked = (newP2.vaelRegenUnlocked ?? false) || (newP2.hasVael && p2VaelNormalGoodReads >= 3)
   const p1RegenJustUnlocked = !newP1.vaelRegenUnlocked && p1RegenUnlocked
@@ -961,7 +1000,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   return {
     ...gameState,
     p1: {
-      ...newP1, hp: p1Hp, bleeds: p1Bleeds, ...dodgeP1, ...p1AbilityUpdates, ...p1MourneUpdates,
+      ...newP1, hp: p1Hp, bleeds: p1Bleeds, poison: p1Poison, ...dodgeP1, ...p1AbilityUpdates, ...p1MourneUpdates,
       forceFieldAccumulated: p1ForceFieldAccumulated,
       ffTotalAbsorbed: p1FfTotalAbsorbed,
       pendingLifesteal: p1PendingLifesteal,
@@ -971,13 +1010,14 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       vaelNormalGoodReads: p1VaelNormalGoodReads,
       vaelToggledGoodReads: p1VaelToggledGoodReads,
       vaelRegenUnlocked: p1RegenUnlocked,
+      vaelEvadeUnlocked: p1VaelEvadeUnlocked,
       ultReadAchieved: p1UltReadAchieved,
       ultGoodReads: p1UltGoodReads,
       ultChainAchieved: p1UltChainAchieved,
       ultimateReady: p1UltimateReady,
     },
     p2: {
-      ...newP2, hp: p2Hp, bleeds: p2Bleeds, ...dodgeP2, ...p2AbilityUpdates, ...p2MourneUpdates,
+      ...newP2, hp: p2Hp, bleeds: p2Bleeds, poison: p2Poison, ...dodgeP2, ...p2AbilityUpdates, ...p2MourneUpdates,
       forceFieldAccumulated: p2ForceFieldAccumulated,
       ffTotalAbsorbed: p2FfTotalAbsorbed,
       pendingLifesteal: p2PendingLifesteal,
@@ -987,6 +1027,7 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       vaelNormalGoodReads: p2VaelNormalGoodReads,
       vaelToggledGoodReads: p2VaelToggledGoodReads,
       vaelRegenUnlocked: p2RegenUnlocked,
+      vaelEvadeUnlocked: p2VaelEvadeUnlocked,
       ultReadAchieved: p2UltReadAchieved,
       ultGoodReads: p2UltGoodReads,
       ultChainAchieved: p2UltChainAchieved,
