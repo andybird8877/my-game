@@ -424,7 +424,12 @@ export function resolveBeforeTurn(gameState) {
     const mourneData  = playerKey === 'p1' ? state.lastTurn?.p1MourneData : state.lastTurn?.p2MourneData
     if (!mourneData) continue
 
-    const { spDealt, leechActive, totalDealt } = mourneData
+    const { spDealt, atDealt, atWasLit, leechActive, totalDealt } = mourneData
+
+    // Self-damage trigger: SP dealt damage, OR AT dealt damage while AT was not Lit
+    const spD           = spDealt ?? 0
+    const atD           = atDealt ?? 0
+    const triggerAmount = spD > 0 ? spD : (atD > 0 && !atWasLit ? atD : 0)
 
     // 1. Force Field payback — fires when accumulated ≥ 10
     const ffAcc = state[playerKey].forceFieldAccumulated ?? 0
@@ -443,10 +448,9 @@ export function resolveBeforeTurn(gameState) {
       steps.push({ player: opponentKey, type: 'mourne_ff', damage: ffDmg, caster: playerKey, stateAfter: state })
     }
 
-    // 2. Self-damage — fires when SP dealt damage and Leech is not suppressing it
-    const spD = spDealt ?? 0
-    if (spD > 0 && !leechActive) {
-      const selfDmg = Math.floor(spD * 0.10)
+    // 2. Self-damage — fires when trigger source dealt damage and Leech is not suppressing it
+    if (triggerAmount > 0 && !leechActive) {
+      const selfDmg = Math.floor(triggerAmount * 0.10)
       if (selfDmg > 0) {
         const newHp              = Math.max(0, state[playerKey].hp - selfDmg)
         const newSelfDamageTotal = state[playerKey].selfDamageTotal + selfDmg
@@ -475,9 +479,9 @@ export function resolveBeforeTurn(gameState) {
       }
     }
 
-    // 3. Siphon heal — if unlocked, SP dealt damage, not Leech turn (Leech suppresses Siphon)
-    if (state[playerKey].siphonUnlocked && spD > 0 && !leechActive) {
-      const siphonHeal = Math.floor(spD * 0.25)
+    // 3. Siphon heal — if unlocked, trigger source dealt damage, not Leech turn (Leech suppresses Siphon)
+    if (state[playerKey].siphonUnlocked && triggerAmount > 0 && !leechActive) {
+      const siphonHeal = Math.floor(triggerAmount * 0.25)
       if (siphonHeal > 0) {
         const newHp = Math.min(state[playerKey].maxHp, state[playerKey].hp + siphonHeal)
         state = { ...state, [playerKey]: { ...state[playerKey], hp: newHp } }
@@ -729,8 +733,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   let p2PendingLifesteal = newP2.pendingLifesteal ?? 0
   const p1WonWithAT = turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p1'
   const p2WonWithAT = turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p2'
-  if (p1LitMoves.at && p1WonWithAT && finalP2Damage > 0) p1PendingLifesteal += Math.ceil(finalP2Damage * 0.33)
-  if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
+  if (p1LitMoves.at && p1WonWithAT && finalP2Damage > 0 && !newP1.hasMourne && !newP1.hasVael) p1PendingLifesteal += Math.ceil(finalP2Damage * 0.33)
+  if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0 && !newP2.hasMourne && !newP2.hasVael) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
 
   // ── HP ────────────────────────────────────────────────────────────────────
   const p1Hp = Math.max(0, newP1.hp - finalP1Damage)
@@ -816,12 +820,16 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
 
   // Data for resolveBeforeTurn to fire Mourne between-turns effects
   const p1MourneData = newP1.hasMourne ? {
-    spDealt:    (p1Move === 'SP' && finalP2Damage > 0 ? finalP2Damage : 0),
+    spDealt:     (p1Move === 'SP' && finalP2Damage > 0 ? finalP2Damage : 0),
+    atDealt:     (p1Move === 'AT' && finalP2Damage > 0 ? finalP2Damage : 0),
+    atWasLit:    p1LitMoves.at,
     leechActive: p1LeechActive,
     totalDealt:  finalP2Damage,
   } : null
   const p2MourneData = newP2.hasMourne ? {
-    spDealt:    (p2Move === 'SP' && finalP1Damage > 0 ? finalP1Damage : 0),
+    spDealt:     (p2Move === 'SP' && finalP1Damage > 0 ? finalP1Damage : 0),
+    atDealt:     (p2Move === 'AT' && finalP1Damage > 0 ? finalP1Damage : 0),
+    atWasLit:    p2LitMoves.at,
     leechActive: p2LeechActive,
     totalDealt:  finalP1Damage,
   } : null
@@ -846,6 +854,16 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p1VaelDisablesLanded++
   }
   if (newP2.hasVael && p2Move === 'SP' && p1Move === 'BL') {
+    p1NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
+    p2VaelDisablesLanded++
+  }
+
+  // Lit AT trigger: Vael wins with AT_WINS_CLEAN while AT is Lit; guaranteed disable
+  if (newP1.hasVael && p1Move === 'AT' && p1LitMoves.at && turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p1') {
+    p2NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
+    p1VaelDisablesLanded++
+  }
+  if (newP2.hasVael && p2Move === 'AT' && p2LitMoves.at && turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p2') {
     p1NewDisabledMove = VAEL_MOVES[Math.floor(Math.random() * 3)]
     p2VaelDisablesLanded++
   }

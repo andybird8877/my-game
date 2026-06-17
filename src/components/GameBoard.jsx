@@ -81,11 +81,13 @@ const CLASS_ICON     = { warrior: '⚔️', mage: '✨', tank: '🛡️' }
 function CharacterSelect({ step, p1Char, onSelect }) {
   const [hovered, setHovered] = useState(null)
 
-  const good = CHARACTERS.filter(c => c.affinity === 'good')
-  const evil = CHARACTERS.filter(c => c.affinity === 'evil')
+  // Only show named characters (those with a portrait); generic placeholders stay hidden
+  const named = CHARACTERS.filter(c => c.portrait)
+  const good  = named.filter(c => c.affinity === 'good')
+  const evil  = named.filter(c => c.affinity === 'evil')
 
   function renderCard(char) {
-    const accent = AFFINITY_COLOR[char.affinity]
+    const accent    = AFFINITY_COLOR[char.affinity]
     const isHovered = hovered === char.id
     return (
       <div
@@ -94,20 +96,48 @@ function CharacterSelect({ step, p1Char, onSelect }) {
         onMouseEnter={() => setHovered(char.id)}
         onMouseLeave={() => setHovered(null)}
         style={{
-          border: `2px solid ${isHovered ? accent : '#444'}`,
-          backgroundColor: isHovered ? '#1c1c1c' : '#111',
-          padding: '10px 12px',
+          border: `2px solid ${isHovered ? accent : '#333'}`,
+          backgroundColor: isHovered ? '#1a1a1a' : '#0e0e0e',
           cursor: 'pointer',
           transition: 'border-color 0.12s, background-color 0.12s',
           userSelect: 'none',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <div style={{ fontWeight: 'bold', marginBottom: 4, fontSize: 13 }}>{char.name}</div>
-        <div style={{ fontSize: 11, color: accent, marginBottom: 2 }}>
-          {char.affinity.toUpperCase()}
+        {/* Portrait */}
+        <div style={{ position: 'relative', width: '100%', paddingBottom: '100%', overflow: 'hidden', flexShrink: 0 }}>
+          <img
+            src={char.portrait}
+            alt={char.name}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover',
+              filter: isHovered ? 'brightness(1.1)' : 'brightness(0.85)',
+              transition: 'filter 0.12s',
+            }}
+          />
+          {/* Affinity tag */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.75))',
+            padding: '20px 8px 6px',
+          }} />
+          <div style={{
+            position: 'absolute', top: 6, right: 6,
+            fontSize: 9, letterSpacing: 1, fontWeight: 'bold',
+            color: accent, background: 'rgba(0,0,0,0.65)',
+            padding: '2px 5px', borderRadius: 2,
+          }}>{char.affinity.toUpperCase()}</div>
         </div>
-        <div style={{ fontSize: 11, color: '#aaa' }}>
-          {CLASS_ICON[char.class]} {char.class} · {char.weight} · {char.hp} HP
+        {/* Info */}
+        <div style={{ padding: '8px 10px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: 14, marginBottom: 3, color: '#fff', letterSpacing: 0.5 }}>{char.name}</div>
+          <div style={{ fontSize: 10, color: '#888' }}>
+            {CLASS_ICON[char.class]} {char.class} · {char.weight} · {char.hp} HP
+          </div>
         </div>
       </div>
     )
@@ -115,31 +145,39 @@ function CharacterSelect({ step, p1Char, onSelect }) {
 
   return (
     <div style={{
-      maxWidth: 720,
+      maxWidth: 640,
       margin: '40px auto',
       fontFamily: 'monospace',
       color: '#fff',
       padding: '0 16px',
     }}>
-      <h2 style={{ textAlign: 'center', marginBottom: 6, fontSize: 20 }}>
-        {step === 1 ? 'P1 — Choose Your Character' : 'P2 — Choose Your Character'}
+      <h2 style={{ textAlign: 'center', marginBottom: 24, fontSize: 18, letterSpacing: 2, color: '#ccc' }}>
+        {step === 1 ? 'P1 — CHOOSE YOUR CHARACTER' : 'P2 — CHOOSE YOUR CHARACTER'}
       </h2>
 
       {step === 2 && p1Char && (
-        <div style={{ textAlign: 'center', marginBottom: 16, color: AFFINITY_COLOR[p1Char.affinity], fontSize: 13 }}>
+        <div style={{ textAlign: 'center', marginBottom: 20, color: AFFINITY_COLOR[p1Char.affinity], fontSize: 12 }}>
           P1 locked in: <strong>{p1Char.name}</strong>
         </div>
       )}
 
-      <div style={{ marginBottom: 8, color: '#5af', fontSize: 12 }}>GOOD</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
-        {good.map(renderCard)}
-      </div>
+      {good.length > 0 && (
+        <>
+          <div style={{ marginBottom: 8, color: '#5af', fontSize: 10, letterSpacing: 2 }}>GOOD</div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${good.length}, 1fr)`, gap: 12, marginBottom: 24 }}>
+            {good.map(renderCard)}
+          </div>
+        </>
+      )}
 
-      <div style={{ marginBottom: 8, color: '#f55', fontSize: 12 }}>EVIL</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        {evil.map(renderCard)}
-      </div>
+      {evil.length > 0 && (
+        <>
+          <div style={{ marginBottom: 8, color: '#f55', fontSize: 10, letterSpacing: 2 }}>EVIL</div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${evil.length}, 1fr)`, gap: 12 }}>
+            {evil.map(renderCard)}
+          </div>
+        </>
+      )}
     </div>
   )
 }
