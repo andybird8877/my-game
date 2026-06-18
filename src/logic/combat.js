@@ -937,8 +937,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   if (newP1.hasVael && p1Read === 'good') p1VaelToggledGoodReads++
   if (newP2.hasVael && p2Read === 'good') p2VaelToggledGoodReads++
 
-  const p1VaelEvadeUnlocked = (newP1.vaelEvadeUnlocked ?? false) || (newP1.hasVael && p1VaelToggledGoodReads >= 3)
-  const p2VaelEvadeUnlocked = (newP2.vaelEvadeUnlocked ?? false) || (newP2.hasVael && p2VaelToggledGoodReads >= 3)
+  const p1VaelEvadeUnlocked = (newP1.vaelEvadeUnlocked ?? false) || (newP1.hasVael && p1VaelToggledGoodReads >= 2)
+  const p2VaelEvadeUnlocked = (newP2.vaelEvadeUnlocked ?? false) || (newP2.hasVael && p2VaelToggledGoodReads >= 2)
 
   const p1RegenUnlocked = (newP1.vaelRegenUnlocked ?? false) || (newP1.hasVael && p1VaelNormalGoodReads >= 3)
   const p2RegenUnlocked = (newP2.vaelRegenUnlocked ?? false) || (newP2.hasVael && p2VaelNormalGoodReads >= 3)

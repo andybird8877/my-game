@@ -23,7 +23,25 @@ const TIPS = {
   moveFF:      { name: 'Force Field',  description: 'Mourne\'s defensive barrier. Absorbs chip damage into the Force Field accumulator instead of taking HP loss. When the accumulator reaches 10, the stored energy fires back at the opponent.' },
   vaelJinx:   { name: 'JINX',        description: 'After unlocking, any Good Clash (without Read active) also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',              unlock: 'Land SP disable 2 times.' },
   vaelRegen:  { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 Good Clashes (without Read active).' },
-  vaelEvade:  { name: 'Evade',       description: 'Unlocks after 3 committed Read-toggle wins. Once unlocked, evade chance scales with remaining HP, from 5% at full health up to 25% near death.',                                        unlock: 'Land 3 Good Reads (with Read active).' },
+  vaelEvade:  { name: 'Evade',       description: 'Unlocks after 2 committed Read-toggle wins. Once unlocked, evade chance scales with remaining HP, from 5% at full health up to 25% near death.',                                        unlock: 'Land 2 Good Reads (with Read active).' },
+}
+
+// ─── Sound ───────────────────────────────────────────────────────────────────
+const SFX = {
+  hits:     ['/audio/hit2.m4a','/audio/hit3.m4a','/audio/hit4.m4a','/audio/hit5.m4a','/audio/hit6.m4a'],
+  blocks:   ['/audio/block1.m4a','/audio/block2.m4a','/audio/block3.m4a','/audio/block4.m4a'],
+  em:       ['/audio/em1.m4a','/audio/em2.m4a','/audio/em3.m4a','/audio/em4.m4a','/audio/em5.m4a'],
+  reversal: '/audio/reversal1.m4a',
+  crowd:    '/audio/crowd1.m4a',
+  forced:   '/audio/forced.m4a',
+  dblblock: '/audio/dblblock1.m4a',
+  ko:       '/audio/ko1.mp3',
+  victory:  '/audio/victory1.wav',
+  bgm:      '/audio/bgm.wav',
+}
+const sfxRand = arr => arr[Math.floor(Math.random() * arr.length)]
+function playSound(src, volume = 1) {
+  try { const a = new Audio(src); a.volume = volume; a.play().catch(() => {}) } catch {}
 }
 
 // ─── Tooltip UI ───────────────────────────────────────────────────────────────
@@ -524,6 +542,16 @@ export default function GameBoard() {
   const [disableFlashes, setDisableFlashes]           = useState({ p1: null, p2: null, key: 0 })
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
   const forceCritRef = useRef(false)
+  const bgmRef       = useRef(null)
+  function startBgm() {
+    if (bgmRef.current) return
+    const a = new Audio(SFX.bgm); a.loop = true; a.volume = 0.25
+    a.play().catch(() => {}); bgmRef.current = a
+  }
+  function stopBgm() {
+    if (!bgmRef.current) return
+    bgmRef.current.pause(); bgmRef.current = null
+  }
 
   // ── Online multiplayer ────────────────────────────────────────────────────
   const [gameMode, setGameMode] = useState(null)   // null | 'offline' | 'online'
@@ -574,6 +602,8 @@ export default function GameBoard() {
   useEffect(() => {
     if (isGameOver && !animating && !ultAnimating && !collapseAnimating && !betweenTurns) {
       setDeathEffectsReady(true)
+      stopBgm()
+      playSound(SFX.victory, 0.8)
     }
   }, [isGameOver, animating, ultAnimating, collapseAnimating, betweenTurns])
 
@@ -727,7 +757,7 @@ export default function GameBoard() {
 
   function handleOnlineLeave() {
     socketRef.current?.disconnect(); socketRef.current = null
-    setState(null); setGameMode(null)
+    stopBgm(); setState(null); setGameMode(null)
     setOnline({ phase: 'menu', roomId: null, myIndex: null, chars: [null, null], pendingMove: false, opponentReady: false, error: null, joinInput: '' })
     setP1ReadActive(false); setAnimating(false); setDisplayedState(null)
     setUltAnimating(false); setCollapseAnimating(false); setCollapseData(null)
@@ -970,6 +1000,26 @@ export default function GameBoard() {
       setTimeout(() => setDisableFlashes({ p1: p1Disabled, p2: p2Disabled, key: disableKey }), 2000)
       setTimeout(() => setDisableFlashes(s => s.key === disableKey ? { p1: null, p2: null, key: 0 } : s), 4000)
     }
+    // Sounds
+    startBgm()
+    const anyKO    = newState.p1.hp === 0 || newState.p2.hp === 0
+    const bothBL   = p1Move === 'BL' && p2Move === 'BL'
+    setTimeout(() => {
+      if (p1Evaded || p2Evaded) {
+        playSound(SFX.reversal)
+      } else if (bothBL) {
+        playSound(SFX.dblblock)
+      } else if (lt.outcome === 'BL_CHIP') {
+        playSound(sfxRand(SFX.blocks))
+      } else if (lt.outcome !== 'TIE') {
+        playSound(sfxRand(SFX.hits))
+        if (lt.p1CritHit || lt.p2CritHit) setTimeout(() => playSound(SFX.crowd, 0.6), 150)
+      }
+      if (anyKO) setTimeout(() => playSound(SFX.ko), 400)
+    }, 2000)
+    const hasUnlocks = (lt.p1NewUnlocks?.length > 0) || (lt.p2NewUnlocks?.length > 0)
+    if (hasUnlocks) setTimeout(() => playSound(sfxRand(SFX.em), 0.8), 2700)
+
     // Between-turns: bleeds + Mourne effects, then unlock announcements
     const effectSteps = resolveBeforeTurn(newState)
     const unlockSteps = buildUnlockSteps(newState)
@@ -977,11 +1027,13 @@ export default function GameBoard() {
   }
 
   function handleBloodletter() {
+    playSound(SFX.forced)
     handleMove('AT', { useBloodletter: true })
   }
 
   function handleAiUlt() {
     if (animating || p2UltAnimating || collapseAnimating) return
+    playSound(sfxRand(SFX.em), 0.9)
     const ultState = processUlt(state, 'p2')
 
     if (state.p2.hasMourne) {
@@ -1012,6 +1064,7 @@ export default function GameBoard() {
 
   function handleUlt() {
     if (animating || ultAnimating || collapseAnimating) return
+    playSound(sfxRand(SFX.em), 0.9)
     const ultState = processUlt(state, 'p1')
 
     if (state.p1.hasMourne) {
@@ -1052,6 +1105,7 @@ export default function GameBoard() {
   }
 
   function handleReset() {
+    stopBgm()
     setState(createInitialState(state.p1Character, state.p2Character))
     setP1ReadActive(false)
     setAnimating(false)
@@ -1069,6 +1123,7 @@ export default function GameBoard() {
   }
 
   function handleChangeChars() {
+    stopBgm()
     setState(null)
     setSelectStep(1)
     setP1CharSel(null)
@@ -1408,7 +1463,7 @@ export default function GameBoard() {
             <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
               <VaelAbilityWheel count={state.p1.vaelDisablesLanded}   unlocked={state.p1.jinxUnlocked}       label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
               <VaelAbilityWheel count={state.p1.vaelNormalGoodReads}  unlocked={state.p1.vaelRegenUnlocked}  label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
-              <VaelAbilityWheel count={state.p1.vaelToggledGoodReads} unlocked={state.p1.vaelEvadeUnlocked}  label="Evade" maxCount={3} tip={TIPS.vaelEvade} />
+              <VaelAbilityWheel count={state.p1.vaelToggledGoodReads} unlocked={state.p1.vaelEvadeUnlocked}  label="Evade" maxCount={2} tip={TIPS.vaelEvade} />
             </div>
           )}
           {/* Stat-up flashes */}
@@ -1591,7 +1646,7 @@ export default function GameBoard() {
             <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
               <VaelAbilityWheel count={state.p2.vaelDisablesLanded}   unlocked={state.p2.jinxUnlocked}       label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
               <VaelAbilityWheel count={state.p2.vaelNormalGoodReads}  unlocked={state.p2.vaelRegenUnlocked}  label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
-              <VaelAbilityWheel count={state.p2.vaelToggledGoodReads} unlocked={state.p2.vaelEvadeUnlocked}  label="Evade" maxCount={3} tip={TIPS.vaelEvade} />
+              <VaelAbilityWheel count={state.p2.vaelToggledGoodReads} unlocked={state.p2.vaelEvadeUnlocked}  label="Evade" maxCount={2} tip={TIPS.vaelEvade} />
             </div>
           )}
           {/* Stat-up flashes */}
