@@ -37,7 +37,6 @@ const SFX = {
   dblblock: '/audio/dblblock1.m4a',
   ko:       '/audio/ko1.mp3',
   victory:  '/audio/victory1.wav',
-  bgm:      '/audio/bgm.wav',
 }
 const sfxRand = arr => arr[Math.floor(Math.random() * arr.length)]
 function playSound(src, volume = 1) {
@@ -324,33 +323,22 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
   const [show, setShow] = useState(false)
   const [pos,  setPos]  = useState({ x: 0, y: 0 })
   const timer = useRef(null)
-  const r = 30, cx = 40, cy = 40
+  const r = 34, cx = 44, cy = 44
   const circumference = 2 * Math.PI * r
+  const NUM_SEG = 6
+  const gap     = 5
+  const slotLen = circumference / NUM_SEG
+  const segLen  = slotLen - gap
 
   const goodReadsCount = Math.min(2, ultGoodReads ?? 0)
   const chainCount     = ultChainAchieved ? 1 : 0
   const litCount       = ['AT', 'BL', 'SP'].filter(m => cycleLit?.[m]).length
   const segmentsMet    = goodReadsCount + chainCount + litCount  // 0–6
 
-  const fillLen     = ready ? circumference : (circumference * segmentsMet / 6)
-  const strokeColor = ready ? accent : (segmentsMet > 0 ? accent + 'aa' : '#444')
-
   const conditions = [
-    {
-      label:  `Good Reads ${goodReadsCount}/2`,
-      done:   goodReadsCount >= 2,
-      detail: 'Toggle Read on and win the clash twice. Does not need to be consecutive.',
-    },
-    {
-      label:  'Power Chain',
-      done:   !!ultChainAchieved,
-      detail: 'Play AT or SP three times in a row with Read off.',
-    },
-    {
-      label:  `Cycle Lit ${litCount}/3`,
-      done:   litCount >= 3,
-      detail: 'Play each of AT, BL, and SP with Read off to light them. You do not need to win the clash.',
-    },
+    { label: `Good Reads ${goodReadsCount}/2`, done: goodReadsCount >= 2, detail: 'Toggle Read on and win the clash twice. Does not need to be consecutive.' },
+    { label: 'Power Chain',                    done: !!ultChainAchieved,  detail: 'Play AT or SP three times in a row with Read off.' },
+    { label: `Cycle Lit ${litCount}/3`,        done: litCount >= 3,       detail: 'Play each of AT, BL, and SP with Read off to light them. You do not need to win the clash.' },
   ]
 
   return (
@@ -360,27 +348,43 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
       onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
     >
-      <svg viewBox="0 0 80 80" style={{ width: 64, height: 64 }}>
-        {/* Track */}
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#2a2a2a" strokeWidth={4} />
-        {/* Fill arc */}
-        <circle
-          cx={cx} cy={cy} r={r} fill="none"
-          stroke={strokeColor}
-          strokeWidth={4}
-          strokeDasharray={`${fillLen} ${circumference}`}
-          strokeLinecap="butt"
-          transform={`rotate(-90 ${cx} ${cy})`}
-          style={{
-            filter: ready ? `drop-shadow(0 0 6px ${accent})` : segmentsMet > 0 ? `drop-shadow(0 0 3px ${accent}88)` : 'none',
-            animation: ready ? 'ultPulse 1.1s ease-in-out infinite' : undefined,
-          }}
-        />
-        {/* Centre */}
+      <svg viewBox="0 0 88 88" style={{ width: 84, height: 84 }}>
+        {/* Background track segments */}
+        {Array.from({ length: NUM_SEG }, (_, i) => (
+          <circle key={`track-${i}`}
+            cx={cx} cy={cy} r={r} fill="none"
+            stroke="#222" strokeWidth={6}
+            strokeDasharray={`${segLen} ${circumference - segLen}`}
+            strokeDashoffset={-(i * slotLen)}
+            transform={`rotate(-90 ${cx} ${cy})`}
+          />
+        ))}
+        {/* Filled segments */}
+        {Array.from({ length: NUM_SEG }, (_, i) => {
+          const filled = i < segmentsMet
+          if (!filled) return null
+          const color = ready ? accent : accent + 'cc'
+          return (
+            <circle key={`seg-${i}`}
+              cx={cx} cy={cy} r={r} fill="none"
+              stroke={color} strokeWidth={6}
+              strokeDasharray={`${segLen} ${circumference - segLen}`}
+              strokeDashoffset={-(i * slotLen)}
+              transform={`rotate(-90 ${cx} ${cy})`}
+              style={{
+                filter: ready
+                  ? `drop-shadow(0 0 5px ${accent})`
+                  : `drop-shadow(0 0 2px ${accent}88)`,
+                animation: ready ? 'ultPulse 1.1s ease-in-out infinite' : undefined,
+              }}
+            />
+          )
+        })}
+        {/* Centre label */}
         {ready
-          ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold"
+          ? <text x={cx} y={cy + 7} textAnchor="middle" fontSize={20} fill={accent} fontWeight="bold"
               style={{ animation: 'ultPulse 1.1s ease-in-out infinite' }}>✓</text>
-          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={12} fill={segmentsMet > 0 ? '#aaa' : '#444'}>{segmentsMet}/6</text>
+          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={13} fill={segmentsMet > 0 ? '#aaa' : '#444'}>{segmentsMet}/6</text>
         }
       </svg>
       <div style={{
@@ -542,23 +546,6 @@ export default function GameBoard() {
   const [disableFlashes, setDisableFlashes]           = useState({ p1: null, p2: null, key: 0 })
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
   const forceCritRef = useRef(false)
-  const bgmRef       = useRef(null)
-  const [bgmOn, setBgmOn] = useState(false)
-  function startBgm() {
-    if (bgmRef.current) return
-    const a = new Audio(SFX.bgm); a.loop = true; a.volume = 0
-    a.play().catch(() => {}); bgmRef.current = a
-  }
-  function stopBgm() {
-    if (!bgmRef.current) return
-    bgmRef.current.pause(); bgmRef.current = null; setBgmOn(false)
-  }
-  function toggleBgm() {
-    if (!bgmRef.current) return
-    const next = !bgmOn
-    bgmRef.current.volume = next ? 0.25 : 0
-    setBgmOn(next)
-  }
 
   // ── Online multiplayer ────────────────────────────────────────────────────
   const [gameMode, setGameMode] = useState(null)   // null | 'offline' | 'online'
@@ -609,7 +596,6 @@ export default function GameBoard() {
   useEffect(() => {
     if (isGameOver && !animating && !ultAnimating && !collapseAnimating && !betweenTurns) {
       setDeathEffectsReady(true)
-      stopBgm()
       playSound(SFX.victory, 0.8)
     }
   }, [isGameOver, animating, ultAnimating, collapseAnimating, betweenTurns])
@@ -764,7 +750,7 @@ export default function GameBoard() {
 
   function handleOnlineLeave() {
     socketRef.current?.disconnect(); socketRef.current = null
-    stopBgm(); setState(null); setGameMode(null)
+    setState(null); setGameMode(null)
     setOnline({ phase: 'menu', roomId: null, myIndex: null, chars: [null, null], pendingMove: false, opponentReady: false, error: null, joinInput: '' })
     setP1ReadActive(false); setAnimating(false); setDisplayedState(null)
     setUltAnimating(false); setCollapseAnimating(false); setCollapseData(null)
@@ -1008,12 +994,11 @@ export default function GameBoard() {
       setTimeout(() => setDisableFlashes(s => s.key === disableKey ? { p1: null, p2: null, key: 0 } : s), 4000)
     }
     // Sounds
-    startBgm()
     const anyKO = newState.p1.hp === 0 || newState.p2.hp === 0
     setTimeout(() => {
       if (lt.outcome === 'BL_CHIP' || (p1Move === 'BL' && p2Move === 'BL')) {
         playSound(sfxRand(SFX.blocks))
-      } else if (lt.outcome !== 'TIE') {
+      } else if (lt.outcome !== 'TIE' || (p1Move === 'AT' && p2Move === 'AT')) {
         playSound(sfxRand(SFX.hits))
         if (lt.p1CritHit || lt.p2CritHit) setTimeout(() => playSound(SFX.crowd, 0.6), 150)
       }
@@ -1106,7 +1091,6 @@ export default function GameBoard() {
   }
 
   function handleReset() {
-    stopBgm()
     setState(createInitialState(state.p1Character, state.p2Character))
     setP1ReadActive(false)
     setAnimating(false)
@@ -1124,7 +1108,6 @@ export default function GameBoard() {
   }
 
   function handleChangeChars() {
-    stopBgm()
     setState(null)
     setSelectStep(1)
     setP1CharSel(null)
@@ -1713,7 +1696,6 @@ export default function GameBoard() {
           <>
             <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Reset</button>
             <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
-            <button onClick={toggleBgm} style={{ fontSize: 10, color: bgmOn ? '#ffb347' : '#555', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }} title={bgmOn ? 'Mute music' : 'Enable music'}>{bgmOn ? '♪ ON' : '♪ OFF'}</button>
           </>
         )}
       </div>
