@@ -543,14 +543,21 @@ export default function GameBoard() {
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
   const forceCritRef = useRef(false)
   const bgmRef       = useRef(null)
+  const [bgmOn, setBgmOn] = useState(false)
   function startBgm() {
     if (bgmRef.current) return
-    const a = new Audio(SFX.bgm); a.loop = true; a.volume = 0.25
+    const a = new Audio(SFX.bgm); a.loop = true; a.volume = 0
     a.play().catch(() => {}); bgmRef.current = a
   }
   function stopBgm() {
     if (!bgmRef.current) return
-    bgmRef.current.pause(); bgmRef.current = null
+    bgmRef.current.pause(); bgmRef.current = null; setBgmOn(false)
+  }
+  function toggleBgm() {
+    if (!bgmRef.current) return
+    const next = !bgmOn
+    bgmRef.current.volume = next ? 0.25 : 0
+    setBgmOn(next)
   }
 
   // ── Online multiplayer ────────────────────────────────────────────────────
@@ -1002,14 +1009,9 @@ export default function GameBoard() {
     }
     // Sounds
     startBgm()
-    const anyKO    = newState.p1.hp === 0 || newState.p2.hp === 0
-    const bothBL   = p1Move === 'BL' && p2Move === 'BL'
+    const anyKO = newState.p1.hp === 0 || newState.p2.hp === 0
     setTimeout(() => {
-      if (p1Evaded || p2Evaded) {
-        playSound(SFX.reversal)
-      } else if (bothBL) {
-        playSound(SFX.dblblock)
-      } else if (lt.outcome === 'BL_CHIP') {
+      if (lt.outcome === 'BL_CHIP' || (p1Move === 'BL' && p2Move === 'BL')) {
         playSound(sfxRand(SFX.blocks))
       } else if (lt.outcome !== 'TIE') {
         playSound(sfxRand(SFX.hits))
@@ -1027,7 +1029,6 @@ export default function GameBoard() {
   }
 
   function handleBloodletter() {
-    playSound(SFX.forced)
     handleMove('AT', { useBloodletter: true })
   }
 
@@ -1712,6 +1713,7 @@ export default function GameBoard() {
           <>
             <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Reset</button>
             <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
+            <button onClick={toggleBgm} style={{ fontSize: 10, color: bgmOn ? '#ffb347' : '#555', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }} title={bgmOn ? 'Mute music' : 'Enable music'}>{bgmOn ? '♪ ON' : '♪ OFF'}</button>
           </>
         )}
       </div>
