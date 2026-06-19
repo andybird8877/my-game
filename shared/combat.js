@@ -175,7 +175,11 @@ function updateCycle(player, move, readActive) {
 
   const { cycleSet, cycleLit } = player
 
-  if (cycleSet.length === 3) {
+  // Rolling window: always append move, trim to last 3
+  const newCycleSet = [...cycleSet, move].slice(-3)
+
+  // Complete when the last 3 Read-off moves are all 3 unique values
+  if (new Set(newCycleSet).size === 3) {
     const newCycleLit = { ...cycleLit, [move]: true }
     return {
       cycleSet: [move],
@@ -184,8 +188,7 @@ function updateCycle(player, move, readActive) {
     }
   }
 
-  if (cycleSet.includes(move)) return {}
-  return { cycleSet: [...cycleSet, move] }
+  return { cycleSet: newCycleSet }
 }
 
 // ── BL vs BL Tiebreaker ───────────────────────────────────────────────────────
@@ -743,24 +746,42 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   }
 
   // ── Force Field (Mourne) — chip absorption ────────────────────────────────
-  // Absorbs chip damage into forceFieldAccumulated instead of HP.
-  // Only intercepts the BL player's incoming chip (plain chip case — read-based
-  // punishments already land on the AT player, not Mourne, so finalPxDamage=0 there).
+  // Absorbs ALL AT-clash damage into forceFieldAccumulated when Mourne plays BL.
+  // This includes plain chip (finalPxDamage on Mourne) AND read-punish damage
+  // that was routed to the AT player instead of Mourne.
   let p1ForceFieldAccumulated = newP1.forceFieldAccumulated ?? 0
   let p2ForceFieldAccumulated = newP2.forceFieldAccumulated ?? 0
 
   let p1FfTotalAbsorbed = newP1.ffTotalAbsorbed ?? 0
   let p2FfTotalAbsorbed = newP2.ffTotalAbsorbed ?? 0
   if (turnResult.outcome === 'BL_CHIP') {
-    if (newP1.hasMourne && p1Move === 'BL' && finalP1Damage > 0) {
-      p1ForceFieldAccumulated += finalP1Damage
-      p1FfTotalAbsorbed += finalP1Damage
-      finalP1Damage = 0
+    if (newP1.hasMourne && p1Move === 'BL') {
+      // Absorb chip damage that landed on Mourne (plain chip case)
+      if (finalP1Damage > 0) {
+        p1ForceFieldAccumulated += finalP1Damage
+        p1FfTotalAbsorbed += finalP1Damage
+        finalP1Damage = 0
+      }
+      // Absorb read-punish damage routed to the AT player (p2) — FF intercepts all AT clash energy
+      if (p2Move === 'AT' && finalP2Damage > 0) {
+        p1ForceFieldAccumulated += finalP2Damage
+        p1FfTotalAbsorbed += finalP2Damage
+        finalP2Damage = 0
+      }
     }
-    if (newP2.hasMourne && p2Move === 'BL' && finalP2Damage > 0) {
-      p2ForceFieldAccumulated += finalP2Damage
-      p2FfTotalAbsorbed += finalP2Damage
-      finalP2Damage = 0
+    if (newP2.hasMourne && p2Move === 'BL') {
+      // Absorb chip damage that landed on Mourne (plain chip case)
+      if (finalP2Damage > 0) {
+        p2ForceFieldAccumulated += finalP2Damage
+        p2FfTotalAbsorbed += finalP2Damage
+        finalP2Damage = 0
+      }
+      // Absorb read-punish damage routed to the AT player (p1) — FF intercepts all AT clash energy
+      if (p1Move === 'AT' && finalP1Damage > 0) {
+        p2ForceFieldAccumulated += finalP1Damage
+        p2FfTotalAbsorbed += finalP1Damage
+        finalP1Damage = 0
+      }
     }
   }
 
