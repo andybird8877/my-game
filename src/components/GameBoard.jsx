@@ -610,7 +610,7 @@ export default function GameBoard() {
   useEffect(() => {
     if (!animating) return
     const impact = setTimeout(() => setDisplayedState(null), 2000)
-    const end    = setTimeout(() => setAnimating(false), 2250)
+    const end    = setTimeout(() => { setAnimating(false); setP1ReadActive(false) }, 2250)
     return () => { clearTimeout(impact); clearTimeout(end) }
   }, [animating])
 
@@ -750,7 +750,6 @@ export default function GameBoard() {
       move, readActive: p1ReadActive,
       useBloodletter: opts.useBloodletter ?? false, useUlt: false,
     })
-    setP1ReadActive(false)
     setOnline(o => ({ ...o, pendingMove: true }))
   }
 
@@ -981,7 +980,6 @@ export default function GameBoard() {
     setLastMoves({ p1: p1Move, p2: p2Move })
     setLastReads({ p1: newState.lastTurn.p1Read ?? 'none', p2: newState.lastTurn.p2Read ?? 'none' })
     setAnimating(true)
-    setP1ReadActive(false)
     // Crit display at impact moment
     const { p1CritHit, p2CritHit } = newState.lastTurn
     if (p1CritHit || p2CritHit) {
@@ -1373,34 +1371,45 @@ export default function GameBoard() {
               )
             })}
           </div>
-          {/* Read toggle — circular, below cycle circles, flush left */}
+          {/* Read toggle — wide switch, below cycle-row */}
           {!gameOver && (() => {
             const readDisabled = animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)
             const isP1Controllable = !isOnline || online.myIndex === 0
             if (!isP1Controllable) return null
+            const toggle = () => { if (!readDisabled) setP1ReadActive(r => !r) }
             return (
-              <div style={{ display: 'flex', marginTop: 6 }}>
-                <div style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div
-                    onClick={!readDisabled ? () => setP1ReadActive(r => !r) : undefined}
-                    style={{
-                      width: '100%', aspectRatio: '1', borderRadius: '50%',
-                      backgroundColor: p1ReadActive ? '#6b3200' : '#111',
-                      border: `2px ${p1ReadActive ? 'solid' : 'dashed'} #f80`,
-                      boxShadow: p1ReadActive ? '0 0 10px #f804, inset 0 0 10px #f802' : 'none',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
-                      fontSize: 9, fontWeight: 'bold',
-                      color: p1ReadActive ? '#ffb347' : '#f806',
-                      textAlign: 'center', lineHeight: 1.2,
-                      cursor: readDisabled ? 'not-allowed' : 'pointer',
-                      opacity: readDisabled ? 0.45 : 1,
-                      userSelect: 'none',
-                    }}
-                  >
-                    READ
-                    <span style={{ fontSize: 13, lineHeight: 1, marginTop: 2 }}>{p1ReadActive ? '◉' : '○'}</span>
-                  </div>
-                </div>
+              <div
+                role="switch"
+                aria-checked={p1ReadActive}
+                tabIndex={0}
+                onClick={toggle}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}
+                style={{
+                  position: 'relative', marginTop: 6,
+                  width: 260, height: 36, borderRadius: 18,
+                  background: '#111', border: '2px solid #555',
+                  display: 'flex', alignItems: 'center',
+                  opacity: readDisabled ? 0.45 : 1,
+                  cursor: readDisabled ? 'not-allowed' : 'pointer',
+                  userSelect: 'none', flexShrink: 0,
+                }}
+              >
+                {/* ON label */}
+                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
+                {/* OFF label */}
+                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
+                {/* sliding cover */}
+                <div style={{
+                  position: 'absolute', top: 2, left: 4,
+                  width: 124, height: 28, borderRadius: 14,
+                  background: '#888',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
+                  boxShadow: '0 0 6px rgba(255,255,255,0.15)',
+                  transform: p1ReadActive ? 'translateX(124px)' : 'translateX(0)',
+                  transition: 'transform 0.22s ease',
+                  pointerEvents: 'none',
+                }}>READ</div>
               </div>
             )
           })()}
@@ -1493,6 +1502,12 @@ export default function GameBoard() {
               />
             </div>
           )}
+          {/* DEV: cycleSet rolling window */}
+          <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#555', marginTop: 4 }}>
+            cycle: [{(state.p1.cycleSet ?? []).map((m, i) => (
+              <span key={i} style={{ color: m === 'AT' ? '#7df' : m === 'SP' ? '#c8f' : '#aaa', marginRight: 2 }}>{m}</span>
+            ))}]
+          </div>
         </div>
 
         {/* ── P2 ── */}
@@ -1590,6 +1605,33 @@ export default function GameBoard() {
               )
             })}
           </div>
+          {/* Read indicator — passive switch showing P2's last read state */}
+          {!gameOver && (() => {
+            const p2ReadOn = lastReads.p2 !== 'none' && (animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove))
+            return (
+              <div style={{
+                position: 'relative', marginTop: 6, marginLeft: 'auto',
+                width: 260, height: 36, borderRadius: 18,
+                background: '#111', border: '2px solid #555',
+                display: 'flex', alignItems: 'center',
+                userSelect: 'none', flexShrink: 0,
+              }}>
+                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
+                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
+                <div style={{
+                  position: 'absolute', top: 2, left: 4,
+                  width: 124, height: 28, borderRadius: 14,
+                  background: '#888',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
+                  boxShadow: '0 0 6px rgba(255,255,255,0.15)',
+                  transform: p2ReadOn ? 'translateX(124px)' : 'translateX(0)',
+                  transition: 'transform 0.22s ease',
+                  pointerEvents: 'none',
+                }}>READ</div>
+              </div>
+            )
+          })()}
           {state.p2.hasDodge && state.p2.dodgeStreak > 0 && (
             <div style={{ fontSize: 10, color: '#7df', marginTop: 4, textAlign: 'right' }}>
               DODGE ×{state.p2.dodgeStreak}
@@ -1680,6 +1722,12 @@ export default function GameBoard() {
               />
             </div>
           )}
+          {/* DEV: cycleSet rolling window */}
+          <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#555', marginTop: 4, textAlign: 'right' }}>
+            [{(state.p2.cycleSet ?? []).map((m, i) => (
+              <span key={i} style={{ color: m === 'AT' ? '#7df' : m === 'SP' ? '#c8f' : '#aaa', marginRight: 2 }}>{m}</span>
+            ))}] :cycle
+          </div>
         </div>
       </div>
 

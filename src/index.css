@@ -238,13 +238,20 @@
 }
 
 .effect-banner {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  z-index: 30;
   animation: effectAppear 2s ease-in-out forwards;
   border-left: 3px solid #a22;
-  background: rgba(160, 0, 0, 0.10);
+  background: rgba(0, 0, 0, 0.72);
   padding: 10px 18px;
   font-family: monospace;
   text-align: center;
   width: 100%;
+  text-shadow: 0 1px 4px #000, 0 0 12px #000;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.7);
 }
 
 @keyframes critAnim {
@@ -318,7 +325,7 @@
 
 .unlock-text {
   position: fixed;
-  top: 38%;
+  top: 60px;
   left: 50%;
   font-size: 40px;
   font-weight: bold;
@@ -326,7 +333,7 @@
   color: #ff0;
   white-space: nowrap;
   letter-spacing: 3px;
-  text-shadow: 0 0 10px #fa0, 0 0 28px #fa0, 0 0 55px #f80, 0 0 90px #f40;
+  text-shadow: 0 2px 6px #000, 0 0 10px #fa0, 0 0 28px #fa0, 0 0 55px #f80, 0 0 90px #f40;
   pointer-events: none;
   z-index: 51;
   animation: unlockAnnounce 2s ease-in-out forwards;

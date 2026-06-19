@@ -762,8 +762,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
         p1FfTotalAbsorbed += finalP1Damage
         finalP1Damage = 0
       }
-      // Absorb read-punish damage routed to the AT player (p2) — FF intercepts all AT clash energy
-      if (p2Move === 'AT' && finalP2Damage > 0) {
+      // Absorb read-punish damage routed to the AT player (p2) — but only when Mourne did NOT
+      // have a good read; a good read is Mourne's own reversal and should not also feed FF.
+      if (p2Move === 'AT' && finalP2Damage > 0 && p1Read !== 'good') {
         p1ForceFieldAccumulated += finalP2Damage
         p1FfTotalAbsorbed += finalP2Damage
         finalP2Damage = 0
@@ -776,8 +777,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
         p2FfTotalAbsorbed += finalP2Damage
         finalP2Damage = 0
       }
-      // Absorb read-punish damage routed to the AT player (p1) — FF intercepts all AT clash energy
-      if (p1Move === 'AT' && finalP1Damage > 0) {
+      // Absorb read-punish damage routed to the AT player (p1) — but not when Mourne's own
+      // good read caused the reversal.
+      if (p1Move === 'AT' && finalP1Damage > 0 && p2Read !== 'good') {
         p2ForceFieldAccumulated += finalP1Damage
         p2FfTotalAbsorbed += finalP1Damage
         finalP1Damage = 0
