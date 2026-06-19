@@ -363,18 +363,18 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
         {Array.from({ length: NUM_SEG }, (_, i) => {
           const filled = i < segmentsMet
           if (!filled) return null
-          const color = ready ? accent : accent + 'cc'
           return (
             <circle key={`seg-${i}`}
               cx={cx} cy={cy} r={r} fill="none"
-              stroke={color} strokeWidth={6}
+              stroke={accent} strokeWidth={6}
+              opacity={ready ? 1 : 0.7}
               strokeDasharray={`${segLen} ${circumference - segLen}`}
               strokeDashoffset={-(i * slotLen)}
               transform={`rotate(-90 ${cx} ${cy})`}
               style={{
                 filter: ready
                   ? `drop-shadow(0 0 5px ${accent})`
-                  : `drop-shadow(0 0 2px ${accent}88)`,
+                  : `drop-shadow(0 0 2px ${accent})`,
                 animation: ready ? 'ultPulse 1.1s ease-in-out infinite' : undefined,
               }}
             />
@@ -1657,6 +1657,14 @@ export default function GameBoard() {
         {activeEffect && activeEffect.type !== 'announce' && renderEffectBanner(activeEffect)}
       </div>
 
+      {state.log.length > 0 && (
+        <div style={{ maxHeight: 120, overflowY: 'auto', fontSize: 12, marginBottom: 8 }}>
+          {[...state.log].reverse().map(entry => (
+            <LogRow key={entry.turn} entry={entry} p1Name={p1Name} p2Name={p2Name} p1Char={state.p1Character} p2Char={state.p2Character} />
+          ))}
+        </div>
+      )}
+
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         {myPlayer.ultimateReady && !gameOver && (
           <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
@@ -1687,17 +1695,6 @@ export default function GameBoard() {
             </button>
           </TooltipWrap>
         )}
-        {isOnline ? (
-          <>
-            <button onClick={handleOnlineRematch} disabled={!gameOver || animating || ultAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Rematch</button>
-            <button onClick={handleOnlineLeave} style={{ fontSize: 10, color: '#aaa' }}>Leave</button>
-          </>
-        ) : (
-          <>
-            <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns} style={{ marginLeft: 'auto' }}>Reset</button>
-            <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
-          </>
-        )}
       </div>
 
       {isOnline && !gameOver && (
@@ -1714,13 +1711,19 @@ export default function GameBoard() {
         </div>
       )}
 
-      {state.log.length > 0 && (
-        <div style={{ flex: 1, overflowY: 'auto', fontSize: 12 }}>
-          {[...state.log].reverse().map(entry => (
-            <LogRow key={entry.turn} entry={entry} p1Name={p1Name} p2Name={p2Name} p1Char={state.p1Character} p2Char={state.p2Character} />
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        {isOnline ? (
+          <>
+            <button onClick={handleOnlineRematch} disabled={!gameOver || animating || ultAnimating || collapseAnimating || betweenTurns}>Rematch</button>
+            <button onClick={handleOnlineLeave} style={{ fontSize: 10, color: '#aaa' }}>Leave</button>
+          </>
+        ) : (
+          <>
+            <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns}>Reset</button>
+            <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
+          </>
+        )}
+      </div>
     </div>
     </>
   )
