@@ -64,7 +64,7 @@ export function getAiMove(gameState) {
 
   // Player cycle threat
   const p1Needs = MOVES.filter(m => !p1.cycleSet.includes(m))
-  const p1IsOneAway = p1.cycleSet.length === 2
+  const p1IsOneAway = new Set(p1.cycleSet).size === 2
   const p1ThreatenedMove = p1IsOneAway ? p1Needs[0] : null
 
   // CPU cycle needs

@@ -319,7 +319,7 @@ function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
 // ─── Ult Meter ────────────────────────────────────────────────────────────────
 // Single progress ring showing combined ULT unlock progress across all 3 conditions
 
-function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
+function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit, ultName, onClick, disabled, tip }) {
   const [show, setShow] = useState(false)
   const [pos,  setPos]  = useState({ x: 0, y: 0 })
   const timer = useRef(null)
@@ -341,9 +341,24 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
     { label: `Cycle Lit ${litCount}/3`,        done: litCount >= 3,       detail: 'Play each of AT, BL, and SP with Read off to light them. You do not need to win the clash.' },
   ]
 
+  const isClickable = ready && !!onClick && !disabled
+
   return (
     <div
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        cursor: isClickable ? 'pointer' : 'default',
+        outline: 'none',
+        borderRadius: 8,
+        padding: isClickable ? 4 : 0,
+        border: isClickable ? `1px solid ${accent}` : '1px solid transparent',
+        boxShadow: isClickable ? `0 0 8px ${accent}55` : 'none',
+        transition: 'box-shadow 0.2s, border 0.2s',
+      }}
+      onClick={isClickable ? onClick : undefined}
+      onKeyDown={isClickable ? e => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
       onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
       onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
@@ -391,7 +406,7 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
         fontSize: 8, letterSpacing: 1, textAlign: 'center', marginTop: 2,
         color: ready ? accent : '#444', fontWeight: ready ? 'bold' : 'normal',
         userSelect: 'none',
-      }}>ULT</div>
+      }}>{ultName ?? 'ULT'}</div>
       {show && (
         <div style={{
           position: 'fixed',
@@ -403,6 +418,14 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit }) {
           color: '#fff', lineHeight: 1.5,
           boxShadow: '0 4px 14px rgba(0,0,0,0.85)',
         }}>
+          {ready && tip && (
+            <>
+              <div style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 3, color: accent, letterSpacing: 0.5 }}>{tip.name}</div>
+              <div style={{ color: '#aaa', fontSize: 10, marginBottom: 4 }}>{tip.description}</div>
+              <div style={{ color: '#ff0', fontSize: 10, marginBottom: 6 }}>{tip.stat}</div>
+              <div style={{ borderTop: '1px solid #333', marginBottom: 6 }} />
+            </>
+          )}
           <div style={{ fontWeight: 'bold', fontSize: 12, marginBottom: 6, color: '#ff0', letterSpacing: 0.5 }}>ULT CONDITIONS</div>
           {conditions.map(({ label, done, detail }) => (
             <div key={label} style={{ marginBottom: 5 }}>
@@ -1463,6 +1486,10 @@ export default function GameBoard() {
                 ultGoodReads={state.p1.ultGoodReads ?? 0}
                 ultChainAchieved={!!state.p1.ultChainAchieved}
                 cycleLit={state.p1.cycleLit}
+                ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
+                onClick={!isOnline ? handleUlt : (online.myIndex === 0 ? handleOnlineUlt : null)}
+                disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+                tip={ultTip(state.p1)}
               />
             </div>
           )}
@@ -1646,6 +1673,10 @@ export default function GameBoard() {
                 ultGoodReads={state.p2.ultGoodReads ?? 0}
                 ultChainAchieved={!!state.p2.ultChainAchieved}
                 cycleLit={state.p2.cycleLit}
+                ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
+                onClick={isOnline && online.myIndex === 1 ? handleOnlineUlt : null}
+                disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+                tip={ultTip(state.p2)}
               />
             </div>
           )}
@@ -1666,17 +1697,6 @@ export default function GameBoard() {
       )}
 
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        {myPlayer.ultimateReady && !gameOver && (
-          <TooltipWrap tip={ultTip(myPlayer)} unlocked={true}>
-            <button
-              onClick={isOnline ? handleOnlineUlt : handleUlt}
-              disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-              style={{ background: myPlayer.hasMourne ? '#7020c0' : '#1a0008', color: myPlayer.hasMourne ? '#e0b0ff' : '#cc2244', fontWeight: 'bold', border: `1px solid ${myPlayer.hasMourne ? 'transparent' : '#cc2244'}`, padding: '2px 10px', cursor: 'pointer', letterSpacing: 1 }}
-            >
-              {myPlayer.hasMourne ? 'COLLAPSE' : myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
-            </button>
-          </TooltipWrap>
-        )}
         {/* Bloodletter — Cairan only */}
         {myPlayer.bloodletterUnlocked && !gameOver && (
           <TooltipWrap tip={TIPS.bloodletter} unlocked={true}>
