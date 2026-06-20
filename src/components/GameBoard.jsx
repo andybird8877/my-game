@@ -12,7 +12,7 @@ const MOVES = ['AT', 'BL', 'SP']
 const TIPS = {
   keenEye:     { name: 'Keen Eye',     description: 'Grants crit chance on clean hits. Crits deal double damage. Crit chance increases with every RPS win.',               unlock: 'Deal damage 3 times.' },
   nimble:      { name: 'Nimble',       description: 'Chance to evade all incoming damage. Cannot evade ultimates. Evasion chance +2% per RPS win, caps at 30%.',          unlock: 'Successfully dodge AT 2 times.' },
-  bloodletter: { name: 'Bloodletter',  description: 'Unleash a guaranteed attack that applies Bleed regardless of opponent\'s move. Must be re-unlocked after each use.',  unlock: 'Land 2 critical hits.' },
+  bloodletter: { name: 'Bloodletter',  description: 'Passive: whenever Cairan lands a toggled Good Read, a Bleed stack is applied to the opponent.',                       unlock: 'Land 2 critical hits.' },
   siphon:      { name: 'Siphon',       description: 'Restores 25% of SP damage dealt as HP each between-turns phase.',                                                     unlock: 'Take self-damage 5 times.' },
   overload:    { name: 'Overload',     description: 'When HP drops below 30%, SP damage is permanently multiplied by 1.75.',                                               unlock: 'Accumulate 10 total self-damage.' },
   leech:       { name: 'Leech',        description: 'Good Reads restore HP equal to 100% of damage dealt. Suppresses self-damage that turn.',                         unlock: 'Land 3 Good Reads (any move).' },
@@ -748,7 +748,7 @@ export default function GameBoard() {
     if (animating || online.pendingMove) return
     socketRef.current?.emit('submit_move', {
       move, readActive: p1ReadActive,
-      useBloodletter: opts.useBloodletter ?? false, useUlt: false,
+      useBloodletter: false, useUlt: false,
     })
     setOnline(o => ({ ...o, pendingMove: true }))
   }
@@ -759,7 +759,6 @@ export default function GameBoard() {
     setOnline(o => ({ ...o, pendingMove: true }))
   }
 
-  function handleOnlineBloodletter() { handleOnlineMove('AT', { useBloodletter: true }) }
 
   function handleOnlineRematch() {
     setState(null); setP1ReadActive(false); setAnimating(false); setDisplayedState(null)
@@ -968,11 +967,8 @@ export default function GameBoard() {
     // AI fires ULT instead of a normal turn when ready
     if (state.p2.ultimateReady) { handleAiUlt(); return }
     const { move: p2Move, useRead: p2ReadActive } = getAiMove(state)
-    const p2UseBloodletter = !!(state.p2.bloodletterUnlocked && state.p2.hasDodge)
     const newState = processTurn(state, p1Move, p2Move, p1ReadActive, p2ReadActive, {
       p1ForceCrit: forceCritRef.current,
-      p1UseBloodletter: opts.useBloodletter ?? false,
-      p2UseBloodletter,
     })
     forceCritRef.current = false
     setDisplayedState(state)
@@ -1019,7 +1015,7 @@ export default function GameBoard() {
     setTimeout(() => {
       if (lt.outcome === 'BL_CHIP' || (p1Move === 'BL' && p2Move === 'BL')) {
         playSound(sfxRand(SFX.blocks))
-      } else if (lt.outcome !== 'TIE' || (p1Move === 'AT' && p2Move === 'AT')) {
+      } else if (lt.outcome !== 'TIE' || (p1Move === 'AT' && p2Move === 'AT') || (p1Move === 'SP' && p2Move === 'SP')) {
         playSound(sfxRand(SFX.hits))
         if (lt.p1CritHit || lt.p2CritHit) setTimeout(() => playSound(SFX.crowd, 0.6), 150)
       }
@@ -1032,10 +1028,6 @@ export default function GameBoard() {
     const effectSteps = resolveBeforeTurn(newState)
     const unlockSteps = buildUnlockSteps(newState)
     scheduleEffects([...effectSteps, ...unlockSteps], 2650)
-  }
-
-  function handleBloodletter() {
-    handleMove('AT', { useBloodletter: true })
   }
 
   function handleAiUlt() {
@@ -1745,24 +1737,6 @@ export default function GameBoard() {
       )}
 
       <div className="move-btn-row" style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        {/* Bloodletter — Cairan only */}
-        {myPlayer.bloodletterUnlocked && !gameOver && (
-          <TooltipWrap tip={TIPS.bloodletter} unlocked={true}>
-            <button
-              onClick={isOnline ? handleOnlineBloodletter : handleBloodletter}
-              disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-              style={{
-                background: 'transparent',
-                color: '#c44',
-                border: '1px solid #c44',
-                fontWeight: 'bold', fontSize: 10, cursor: 'pointer',
-                padding: '2px 8px',
-              }}
-            >
-              BLOODLETTER
-            </button>
-          </TooltipWrap>
-        )}
       </div>
 
       {isOnline && !gameOver && (

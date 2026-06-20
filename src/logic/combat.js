@@ -19,29 +19,47 @@ export function resolveTurn(p1Move, p2Move) {
   return OUTCOMES[`${p1Move}_${p2Move}`]
 }
 
-export function calculateDamage({ outcome, loser, winner, p1Move, p2Move, p1Read, p2Read, p1AtDmg = AT_DAMAGE, p2AtDmg = AT_DAMAGE, p1SpDmg = SP_DAMAGE, p2SpDmg = SP_DAMAGE, p1FlowState = false, p2FlowState = false }) {
+export function calculateDamage({ outcome, loser, winner, p1Move, p2Move, p1Read, p2Read, p1AtDmg = AT_DAMAGE, p2AtDmg = AT_DAMAGE, p1SpDmg = SP_DAMAGE, p2SpDmg = SP_DAMAGE, p1FlowState = false, p2FlowState = false, p1ZenState = false, p2ZenState = false, p1GodModeState = false, p2GodModeState = false }) {
   function readByMove(move) {
     return p1Move === move ? p1Read : p2Read
   }
   function flowOf(player) { return player === 'p1' ? p1FlowState : p2FlowState }
+  // Tier helper: returns the highest active flow tier for a player
+  function tierOf(player) {
+    const god  = player === 'p1' ? p1GodModeState : p2GodModeState
+    const zen  = player === 'p1' ? p1ZenState      : p2ZenState
+    const flow = player === 'p1' ? p1FlowState     : p2FlowState
+    return god ? 'god' : zen ? 'zen' : flow ? 'flow' : 'none'
+  }
+  function flowMultFor(player) {
+    const t = tierOf(player)
+    return t === 'god' ? 2.25 : t === 'zen' ? 2.00 : t === 'flow' ? 1.75 : 1.0
+  }
+  function tieMult(player) {
+    const t = tierOf(player)
+    return t === 'god' ? 2.00 : t === 'zen' ? 1.75 : t === 'flow' ? 1.50 : 1.0
+  }
+  function blTieFlatDmg(player) {
+    const t = tierOf(player)
+    return t === 'god' ? 45 : t === 'zen' ? 30 : t === 'flow' ? 15 : 0
+  }
 
   // ── TIE ──────────────────────────────────────────────────────────────────
   if (outcome === 'TIE') {
     const p1Reads = p1Read !== 'none'
     const p2Reads = p2Read !== 'none'
 
-    const p1FlowMult = p1FlowState ? 1.25 : 1.0
-    const p2FlowMult = p2FlowState ? 1.25 : 1.0
-
     if (p1Move === 'BL') {
-      return {
-        p1Damage: p1Reads ? Math.ceil(p2AtDmg * CHIP_PERCENT * p2FlowMult) : 0,
-        p2Damage: p2Reads ? Math.ceil(p1AtDmg * CHIP_PERCENT * p1FlowMult) : 0,
-      }
+      // BL vs BL: flow-tier players deal flat damage; others use Read-toggle formula
+      const p1Flat = blTieFlatDmg('p1')
+      const p2Flat = blTieFlatDmg('p2')
+      const p1Dmg = p1Flat > 0 ? p1Flat : (p1Reads ? Math.ceil(p2AtDmg * CHIP_PERCENT * tieMult('p2')) : 0)
+      const p2Dmg = p2Flat > 0 ? p2Flat : (p2Reads ? Math.ceil(p1AtDmg * CHIP_PERCENT * tieMult('p1')) : 0)
+      return { p1Damage: p1Dmg, p2Damage: p2Dmg }
     }
 
-    const p1Out = (p1Move === 'AT' ? p1AtDmg : p1SpDmg) * p1FlowMult
-    const p2Out = (p2Move === 'AT' ? p2AtDmg : p2SpDmg) * p2FlowMult
+    const p1Out = (p1Move === 'AT' ? p1AtDmg : p1SpDmg) * tieMult('p1')
+    const p2Out = (p2Move === 'AT' ? p2AtDmg : p2SpDmg) * tieMult('p2')
 
     if (!p1Reads && !p2Reads) return { p1Damage: Math.floor(p2Out), p2Damage: Math.floor(p1Out) }
     if (p1Reads && p2Reads) {
@@ -80,7 +98,7 @@ export function calculateDamage({ outcome, loser, winner, p1Move, p2Move, p1Read
   const loserMove  = atWins ? 'SP' : 'BL'
   const goodMult   = readByMove(winnerMove) === 'good' ? 2.0 : 1.0
   const badMult    = readByMove(loserMove)  === 'bad'  ? 1.5 : 1.0
-  const flowMult   = flowOf(winner) ? 1.5 : 1.0
+  const flowMult   = flowMultFor(winner)
   const amount     = Math.floor(base * goodMult * badMult * flowMult)
 
   return {
@@ -101,7 +119,7 @@ export function createInitialState(p1Char = null, p2Char = null) {
     cycleSet: [], cycleLit: {}, litMoves: { at: false, bl: false, sp: false },
     ultReadAchieved: false, ultChainAchieved: false, ultGoodReads: 0,
     pendingLifesteal: 0,
-    ultimateReady: false, flowState: false,
+    ultimateReady: false, flowState: false, zenState: false, godModeState: false,
     consecutiveGoodReads: 0, bleeds: [], poison: 0,
     // Cairan ability trackers (all players carry these; only used when hasDodge)
     damageDealtCount: 0, successfulDodgeCount: 0, critHitsDealt: 0,
@@ -154,20 +172,30 @@ function updateChains(player, move, readActive) {
     ...player,
     atChain,
     spChain,
-    ...(atPlain && atChain >= 3 && { atDmgBuff: Math.floor(player.baseAtDamage * (1.15 ** (atChain - 1))) }),
-    ...(spPlain && spChain >= 2 && { spDmgBuff: Math.floor(player.baseSpDamage * (1.1  ** (spChain - 1))) }),
+    atDmgBuff: (atPlain && atChain >= 3) ? Math.floor(player.baseAtDamage * (1.15 ** (atChain - 1))) : 0,
+    spDmgBuff: (spPlain && spChain >= 2) ? Math.floor(player.baseSpDamage * (1.1  ** (spChain - 1))) : 0,
   }
 }
 
 function updateFlowState(player, myRead, opponentRead) {
   if (myRead === 'bad' || opponentRead === 'good') {
-    return { flowState: false, consecutiveGoodReads: 0 }
+    return { flowState: false, zenState: false, godModeState: false, consecutiveGoodReads: 0 }
   }
   if (myRead === 'good') {
     const newCount = player.consecutiveGoodReads + 1
-    return { flowState: player.flowState || newCount >= 2, consecutiveGoodReads: newCount }
+    return {
+      flowState:    player.flowState    || newCount >= 2,
+      zenState:     player.zenState     || newCount >= 3,
+      godModeState: player.godModeState || newCount >= 4,
+      consecutiveGoodReads: newCount,
+    }
   }
-  return { flowState: player.flowState, consecutiveGoodReads: 0 }
+  return {
+    flowState:    player.flowState,
+    zenState:     player.zenState,
+    godModeState: player.godModeState,
+    consecutiveGoodReads: 0,
+  }
 }
 
 function updateCycle(player, move, readActive) {
@@ -182,7 +210,7 @@ function updateCycle(player, move, readActive) {
   if (new Set(newCycleSet).size === 3) {
     const newCycleLit = { ...cycleLit, [move]: true }
     return {
-      cycleSet: [move],
+      cycleSet: [],
       cycleLit: newCycleLit,
       litMoves: { at: !!newCycleLit.AT, bl: !!newCycleLit.BL, sp: !!newCycleLit.SP },
     }
@@ -555,8 +583,12 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const p1Read = classifyRead(p1ReadActive, 'p1', turnResult.winner)
   const p2Read = classifyRead(p2ReadActive, 'p2', turnResult.winner)
 
-  const p1FlowNow = gameState.p1.flowState
-  const p2FlowNow = gameState.p2.flowState
+  const p1FlowNow    = gameState.p1.flowState
+  const p2FlowNow    = gameState.p2.flowState
+  const p1ZenNow     = gameState.p1.zenState
+  const p2ZenNow     = gameState.p2.zenState
+  const p1GodModeNow = gameState.p1.godModeState
+  const p2GodModeNow = gameState.p2.godModeState
   const p1FlowUpdate = updateFlowState(gameState.p1, p1Read, p2Read)
   const p2FlowUpdate = updateFlowState(gameState.p2, p2Read, p1Read)
 
@@ -599,8 +631,12 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2AtDmg,
     p1SpDmg: p1SpDmgEff,
     p2SpDmg: p2SpDmgEff,
-    p1FlowState: p1FlowNow,
-    p2FlowState: p2FlowNow,
+    p1FlowState:    p1FlowNow,
+    p2FlowState:    p2FlowNow,
+    p1ZenState:     p1ZenNow,
+    p2ZenState:     p2ZenNow,
+    p1GodModeState: p1GodModeNow,
+    p2GodModeState: p2GodModeNow,
   })
 
   // Declare final damage before dodge/force-field blocks to avoid TDZ
@@ -689,19 +725,12 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     }
   }
 
-  // ── Bloodletter (Cairan active) ───────────────────────────────────────────
+  // ── Bloodletter (Cairan passive) ─────────────────────────────────────────
+  // Once unlocked, landing a toggled Good Read inflicts a bleed stack on the opponent.
   let p1Bleeds = newP1.bleeds
   let p2Bleeds = newP2.bleeds
-  const p1BloodletterFired = !!(options.p1UseBloodletter && newP1.bloodletterUnlocked && (newP1.bloodletterCooldown ?? 0) === 0)
-  const p2BloodletterFired = !!(options.p2UseBloodletter && newP2.bloodletterUnlocked && (newP2.bloodletterCooldown ?? 0) === 0)
-  if (p1BloodletterFired) {
-    finalP2Damage += Math.max(newP1.atDmgBuff, newP1.baseAtDamage)
-    p2Bleeds = [...p2Bleeds, { currentDamage: 1 }]
-  }
-  if (p2BloodletterFired) {
-    finalP1Damage += Math.max(newP2.atDmgBuff, newP2.baseAtDamage)
-    p1Bleeds = [...p1Bleeds, { currentDamage: 1 }]
-  }
+  if (newP1.bloodletterUnlocked && p1Read === 'good') p2Bleeds = [...p2Bleeds, { currentDamage: 1 }]
+  if (newP2.bloodletterUnlocked && p2Read === 'good') p1Bleeds = [...p1Bleeds, { currentDamage: 1 }]
 
   // ── Nimble (Cairan passive) ───────────────────────────────────────────────
   let p1NimbleTriggered = false
@@ -729,8 +758,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
 
   // ── Lit BL: negate chip punishment in BL_CHIP only (not SP wins) ─────────
   if (turnResult.outcome === 'BL_CHIP') {
-    if (p1Move === 'BL' && p1LitMoves.bl && p1Read !== 'good' && finalP1Damage > 0) finalP1Damage = 0
-    if (p2Move === 'BL' && p2LitMoves.bl && p2Read !== 'good' && finalP2Damage > 0) finalP2Damage = 0
+    if (p1Move === 'BL' && p1LitMoves.bl && p1Read !== 'good' && finalP1Damage > 0 && !newP1.hasMourne) finalP1Damage = 0
+    if (p2Move === 'BL' && p2LitMoves.bl && p2Read !== 'good' && finalP2Damage > 0 && !newP2.hasMourne) finalP2Damage = 0
   }
 
   // ── Wrack: Rot (poison) application + cleanse ────────────────────────────────
@@ -756,33 +785,25 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   let p2FfTotalAbsorbed = newP2.ffTotalAbsorbed ?? 0
   if (turnResult.outcome === 'BL_CHIP') {
     if (newP1.hasMourne && p1Move === 'BL') {
-      // Absorb chip damage that landed on Mourne (plain chip case)
+      const p1FfMult = p1LitMoves.bl ? 1.75 : 1
       if (finalP1Damage > 0) {
-        p1ForceFieldAccumulated += finalP1Damage
-        p1FfTotalAbsorbed += finalP1Damage
-        finalP1Damage = 0
+        const amt = Math.floor(finalP1Damage * p1FfMult)
+        p1ForceFieldAccumulated += amt; p1FfTotalAbsorbed += amt; finalP1Damage = 0
       }
-      // Absorb read-punish damage routed to the AT player (p2) — but only when Mourne did NOT
-      // have a good read; a good read is Mourne's own reversal and should not also feed FF.
       if (p2Move === 'AT' && finalP2Damage > 0 && p1Read !== 'good') {
-        p1ForceFieldAccumulated += finalP2Damage
-        p1FfTotalAbsorbed += finalP2Damage
-        finalP2Damage = 0
+        const amt = Math.floor(finalP2Damage * p1FfMult)
+        p1ForceFieldAccumulated += amt; p1FfTotalAbsorbed += amt; finalP2Damage = 0
       }
     }
     if (newP2.hasMourne && p2Move === 'BL') {
-      // Absorb chip damage that landed on Mourne (plain chip case)
+      const p2FfMult = p2LitMoves.bl ? 1.75 : 1
       if (finalP2Damage > 0) {
-        p2ForceFieldAccumulated += finalP2Damage
-        p2FfTotalAbsorbed += finalP2Damage
-        finalP2Damage = 0
+        const amt = Math.floor(finalP2Damage * p2FfMult)
+        p2ForceFieldAccumulated += amt; p2FfTotalAbsorbed += amt; finalP2Damage = 0
       }
-      // Absorb read-punish damage routed to the AT player (p1) — but not when Mourne's own
-      // good read caused the reversal.
       if (p1Move === 'AT' && finalP1Damage > 0 && p2Read !== 'good') {
-        p2ForceFieldAccumulated += finalP1Damage
-        p2FfTotalAbsorbed += finalP1Damage
-        finalP1Damage = 0
+        const amt = Math.floor(finalP1Damage * p2FfMult)
+        p2ForceFieldAccumulated += amt; p2FfTotalAbsorbed += amt; finalP1Damage = 0
       }
     }
   }
@@ -792,15 +813,15 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   let p2PendingLifesteal = newP2.pendingLifesteal ?? 0
   const p1WonWithAT = turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p1'
   const p2WonWithAT = turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p2'
-  if (p1LitMoves.at && p1WonWithAT && finalP2Damage > 0 && !newP1.hasMourne && !newP1.hasVael) p1PendingLifesteal += Math.ceil(finalP2Damage * 0.33)
-  if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0 && !newP2.hasMourne && !newP2.hasVael) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
+  if (p1LitMoves.at && p1WonWithAT && finalP2Damage > 0 && newP1.hasDodge) p1PendingLifesteal += Math.ceil(finalP2Damage * 0.33)
+  if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0 && newP2.hasDodge) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
 
   // ── HP ────────────────────────────────────────────────────────────────────
   const p1Hp = Math.max(0, newP1.hp - finalP1Damage)
   const p2Hp = Math.max(0, newP2.hp - finalP2Damage)
 
   // ── Cairan ability trackers ───────────────────────────────────────────────
-  function buildAbilityUpdates(player, dealtDamage, dodgedThisTurn, critHit, cleanWin, bloodletterUsed, goodRead) {
+  function buildAbilityUpdates(player, dealtDamage, dodgedThisTurn, critHit, cleanWin, goodRead) {
     if (!player.hasDodge) return { updates: {}, newUnlocks: [] }
 
     const newDamageDealtCount = player.damageDealtCount    + (dealtDamage   ? 1 : 0)
@@ -809,9 +830,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
 
     const keenEyeUnlocked    = player.keenEyeUnlocked    || newDamageDealtCount >= 3
     const nimbleUnlocked     = player.nimbleUnlocked     || newSuccessfulDodges  >= 2
-    // Bloodletter: unlocks at 2 crits, but resets to locked (crit count 0) after use
-    const critHitsDealt      = bloodletterUsed ? 0 : newCritHitsDealt
-    const bloodletterUnlocked = bloodletterUsed ? false : (player.bloodletterUnlocked || newCritHitsDealt >= 2)
+    // Bloodletter: unlocks permanently at 2 crits, never resets
+    const critHitsDealt      = newCritHitsDealt
+    const bloodletterUnlocked = player.bloodletterUnlocked || newCritHitsDealt >= 2
 
     const newUnlocks = []
     if (!player.keenEyeUnlocked    && keenEyeUnlocked)    newUnlocks.push('keenEye')
@@ -840,10 +861,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const p1CleanWin = (turnResult.outcome === 'AT_WINS_CLEAN' || turnResult.outcome === 'SP_WINS_CLEAN') && turnResult.winner === 'p1'
   const p2CleanWin = (turnResult.outcome === 'AT_WINS_CLEAN' || turnResult.outcome === 'SP_WINS_CLEAN') && turnResult.winner === 'p2'
   const { updates: p1AbilityUpdates, newUnlocks: p1CairanUnlocks } = buildAbilityUpdates(
-    newP1, finalP2Damage > 0, p1DodgedThisTurn, p1CritHit, p1CleanWin, p1BloodletterFired, p1CleanWin
+    newP1, finalP2Damage > 0, p1DodgedThisTurn, p1CritHit, p1CleanWin, p1CleanWin
   )
   const { updates: p2AbilityUpdates, newUnlocks: p2CairanUnlocks } = buildAbilityUpdates(
-    newP2, finalP1Damage > 0, p2DodgedThisTurn, p2CritHit, p2CleanWin, p2BloodletterFired, p2CleanWin
+    newP2, finalP1Damage > 0, p2DodgedThisTurn, p2CritHit, p2CleanWin, p2CleanWin
   )
 
   // ── Mourne ability trackers ───────────────────────────────────────────────
@@ -994,16 +1015,26 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2SpDmgBuff: newP2.spDmgBuff,
     p1FlowActive: newP1.flowState,
     p2FlowActive: newP2.flowState,
-    p1FlowActivated: !p1FlowNow && newP1.flowState,
-    p2FlowActivated: !p2FlowNow && newP2.flowState,
-    p1FlowBroken:    p1FlowNow  && !newP1.flowState,
-    p2FlowBroken:    p2FlowNow  && !newP2.flowState,
+    p1FlowActivated: !p1FlowNow    && newP1.flowState,
+    p2FlowActivated: !p2FlowNow    && newP2.flowState,
+    p1FlowBroken:     p1FlowNow    && !newP1.flowState,
+    p2FlowBroken:     p2FlowNow    && !newP2.flowState,
+    p1ZenActive:      newP1.zenState,
+    p2ZenActive:      newP2.zenState,
+    p1ZenActivated:  !p1ZenNow     && newP1.zenState,
+    p2ZenActivated:  !p2ZenNow     && newP2.zenState,
+    p1ZenBroken:      p1ZenNow     && !newP1.zenState,
+    p2ZenBroken:      p2ZenNow     && !newP2.zenState,
+    p1GodModeActive:  newP1.godModeState,
+    p2GodModeActive:  newP2.godModeState,
+    p1GodModeActivated: !p1GodModeNow && newP1.godModeState,
+    p2GodModeActivated: !p2GodModeNow && newP2.godModeState,
+    p1GodModeBroken:     p1GodModeNow  && !newP1.godModeState,
+    p2GodModeBroken:     p2GodModeNow  && !newP2.godModeState,
     p1NimbleTriggered,
     p2NimbleTriggered,
     p1VaelEvaded,
     p2VaelEvaded,
-    p1UsedBloodletter: p1BloodletterFired,
-    p2UsedBloodletter: p2BloodletterFired,
     p1NewUnlocks: [...p1CairanUnlocks, ...p1MourneUnlocks],
     p2NewUnlocks: [...p2CairanUnlocks, ...p2MourneUnlocks],
     p1MourneData,
