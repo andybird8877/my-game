@@ -147,6 +147,13 @@ export function createInitialState(p1Char = null, p2Char = null) {
     vaelEvadeUnlocked: false,
     // Wrack ability trackers (all players carry these; only used when hasWrack)
     hasWrack: !!hasWrack,
+    wrackChainTriggers: 0,    // counts times AT or SP chain reached 3+ (FESTERING unlock)
+    wrackCycleTriggers: 0,    // counts cycle completions (WITHER unlock)
+    wrackReadTriggers: 0,     // counts toggled Good Reads with AT or SP (GALL unlock)
+    festeringUnlocked: false,
+    witherUnlocked: false,
+    gallUnlocked: false,
+    wrackPoisonDealt: 0,
   })
   return {
     p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.hasWrack, p1Char?.weight, p1Char?.class),
@@ -265,6 +272,10 @@ export function calcUltDamage(player) {
     const actual   = disables * clashes
     return { raw: actual, actual }
   }
+  if (player.hasWrack) {
+    const poisonDealt = player.wrackPoisonDealt ?? 0
+    return { raw: poisonDealt, actual: poisonDealt }
+  }
   // Cairan / default: ASSASSINATE = 2×AT + 2×SP
   const baseAt = player.baseAtDamage ?? AT_DAMAGE
   const baseSp = player.baseSpDamage ?? SP_DAMAGE
@@ -366,9 +377,46 @@ function processVaelUlt(gameState, ultUser) {
   }
 }
 
+function processWrackUlt(gameState, ultUser) {
+  const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
+  const attacker = gameState[ultUser]
+  const defender = gameState[defenderKey]
+  const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
+  const newDefenderHp = Math.max(0, defender.hp - actualDamage)
+  const entry = {
+    turn: gameState.log.length + 1,
+    isUlt: true,
+    isWrackUlt: true,
+    ultUser,
+    rawDamage,
+    actualDamage,
+    healAmount: 0,
+    wrackPoisonDealt: attacker.wrackPoisonDealt ?? 0,
+    p1Hp: ultUser === 'p1' ? attacker.hp : newDefenderHp,
+    p2Hp: ultUser === 'p2' ? attacker.hp : newDefenderHp,
+  }
+  return {
+    ...gameState,
+    [ultUser]: {
+      ...attacker,
+      ultimateReady: false,
+      cycleLit: {},
+      cycleSet: [],
+      litMoves: { at: false, bl: false, sp: false },
+      ultReadAchieved: false,
+      ultGoodReads: 0,
+      ultChainAchieved: false,
+    },
+    [defenderKey]: { ...defender, hp: newDefenderHp },
+    lastTurn: entry,
+    log: [...gameState.log, entry],
+  }
+}
+
 export function processUlt(gameState, ultUser) {
   if (gameState[ultUser]?.hasMourne) return processCollapse(gameState, ultUser)
   if (gameState[ultUser]?.hasVael)   return processVaelUlt(gameState, ultUser)
+  if (gameState[ultUser]?.hasWrack)  return processWrackUlt(gameState, ultUser)
   const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
@@ -464,6 +512,16 @@ export function resolveBeforeTurn(gameState) {
       },
     }
     steps.push({ player: playerKey, type: 'poison', damage: poison, stateAfter: state })
+    const opponentKey = playerKey === 'p1' ? 'p2' : 'p1'
+    if (state[opponentKey].hasWrack) {
+      state = {
+        ...state,
+        [opponentKey]: {
+          ...state[opponentKey],
+          wrackPoisonDealt: (state[opponentKey].wrackPoisonDealt ?? 0) + poison,
+        },
+      }
+    }
   }
 
   // ── Mourne between-turns effects ──────────────────────────────────────────
@@ -658,6 +716,33 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     if (turnResult.winner === 'p2' && p2LitMoves.sp) finalP1Damage = Math.floor(finalP1Damage * 1.20)
   }
 
+  // ── Wrack: SP wins vs BL → triangular poison stack instead of direct damage ─
+  // Finds largest n where n*(n+1)/2 <= the SP damage that would have landed,
+  // adds n to the opponent's poison stack, and zeroes the direct damage entirely.
+  // Lit SP boost is intentionally included — a lit SP gives a bigger curse.
+  function triangularN(dmg) {
+    let n = 0
+    while ((n + 1) * (n + 2) / 2 <= dmg) n++
+    return n
+  }
+  if (turnResult.outcome === 'SP_WINS_CLEAN') {
+    if (newP1.hasWrack && turnResult.winner === 'p1' && finalP2Damage > 0) {
+      const n = triangularN(finalP2Damage)
+      if (n > 0) {
+        // p2Poison is declared later; use a pending value carried into the BL block below
+        newP1._wrackSpPoison = (newP1._wrackSpPoison ?? 0) + n
+      }
+      finalP2Damage = 0
+    }
+    if (newP2.hasWrack && turnResult.winner === 'p2' && finalP1Damage > 0) {
+      const n = triangularN(finalP1Damage)
+      if (n > 0) {
+        newP2._wrackSpPoison = (newP2._wrackSpPoison ?? 0) + n
+      }
+      finalP1Damage = 0
+    }
+  }
+
   // ── Dodge override ────────────────────────────────────────────────────────
   let dodgeP1 = {}
   let dodgeP2 = {}
@@ -762,16 +847,28 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     if (p2Move === 'BL' && p2LitMoves.bl && p2Read !== 'good' && finalP2Damage > 0 && !newP2.hasMourne) finalP2Damage = 0
   }
 
-  // ── Wrack: Rot (poison) application + cleanse ────────────────────────────────
-  // A Good Read landed by the poisoned player cleanses their own poison entirely.
-  // Wrack mirrors the chip damage it just took as poison onto the opponent —
-  // this does NOT zero out finalP1Damage/finalP2Damage; Wrack still takes
-  // the chip damage normally, it just also curses the opponent in response.
+  // ── Wrack: Rot (poison) — BL application, SP carry-in, and Good Read cleanse
+  // Good Read cleanses the reading player's own poison entirely.
+  // BL chip case (Wrack absorbs chip): opponent gets mirror of chip value + 5.
+  // BL punish case (Wrack's read or attacker bad read, Wrack takes 0 damage):
+  //   opponent gets flat +10 poison, no change to direct damage.
+  // SP carry-in: _wrackSpPoison set in the SP block above lands here.
   let p1Poison = p1Read === 'good' ? 0 : (newP1.poison ?? 0)
   let p2Poison = p2Read === 'good' ? 0 : (newP2.poison ?? 0)
+  // Carry in SP poison from the block above
+  if (newP1._wrackSpPoison) { p2Poison += newP1._wrackSpPoison; newP1._wrackSpPoison = 0 }
+  if (newP2._wrackSpPoison) { p1Poison += newP2._wrackSpPoison; newP2._wrackSpPoison = 0 }
   if (turnResult.outcome === 'BL_CHIP') {
-    if (newP1.hasWrack && p1Move === 'BL' && finalP1Damage > 0) { p2Poison += finalP1Damage }
-    if (newP2.hasWrack && p2Move === 'BL' && finalP2Damage > 0) { p1Poison += finalP2Damage }
+    // p1 is Wrack blocking — poison only on toggled good read
+    if (newP1.hasWrack && p1Move === 'BL' && finalP2Damage > 0 && p1Read === 'good') {
+      p2Poison += 7
+      finalP2Damage = 0
+    }
+    // p2 is Wrack blocking — poison only on toggled good read
+    if (newP2.hasWrack && p2Move === 'BL' && finalP1Damage > 0 && p2Read === 'good') {
+      p1Poison += 7
+      finalP1Damage = 0
+    }
   }
 
   // ── Force Field (Mourne) — chip absorption ────────────────────────────────
@@ -989,6 +1086,62 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const p1RegenJustUnlocked = !newP1.vaelRegenUnlocked && p1RegenUnlocked
   const p2RegenJustUnlocked = !newP2.vaelRegenUnlocked && p2RegenUnlocked
   // Regen heal is applied in resolveBeforeTurn, not here.
+
+  // ── Wrack passives: FESTERING / WITHER / GALL ────────────────────────────
+  // FESTERING (chain): unlocks after AT/SP chain reaches 3+ on 3 separate turns.
+  //   Once unlocked, any chain-3+ hit also poisons for the current chain length.
+  // WITHER (cycle): unlocks after 3 cycle completions.
+  //   Once unlocked, each further cycle completion poisons for Wrack's base AT damage.
+  // GALL (read): unlocks after 3 toggled Good Reads with AT or SP.
+  //   Once unlocked, each further AT/SP toggled Good Read adds +3 poison on top.
+  for (const [pk, oppKey, move, read, chainLen, cycleJustCompleted, readActive] of [
+    ['p1', 'p2', p1Move, p1Read, Math.max(newP1.atChain, newP1.spChain), newP1.cycleSet?.length === 0 && (gameState.p1.cycleSet?.length ?? 0) > 0, p1ReadActive],
+    ['p2', 'p1', p2Move, p2Read, Math.max(newP2.atChain, newP2.spChain), newP2.cycleSet?.length === 0 && (gameState.p2.cycleSet?.length ?? 0) > 0, p2ReadActive],
+  ]) {
+    const player = pk === 'p1' ? newP1 : newP2
+    if (!player.hasWrack) continue
+    let wrackChainTriggers = player.wrackChainTriggers ?? 0
+    let wrackCycleTriggers = player.wrackCycleTriggers ?? 0
+    let wrackReadTriggers  = player.wrackReadTriggers  ?? 0
+    let festeringUnlocked  = player.festeringUnlocked  ?? false
+    let witherUnlocked     = player.witherUnlocked     ?? false
+    let gallUnlocked       = player.gallUnlocked       ?? false
+    // FESTERING — track chain-3+ turns
+    if (chainLen >= 4) {
+      wrackChainTriggers++
+      if (wrackChainTriggers >= 4) festeringUnlocked = true
+    }
+    if (festeringUnlocked && chainLen >= 4) {
+      if (pk === 'p1') p2Poison += chainLen
+      else             p1Poison += chainLen
+    }
+    // WITHER — track cycle completions
+    if (cycleJustCompleted) {
+      wrackCycleTriggers++
+      if (wrackCycleTriggers >= 4) witherUnlocked = true
+    }
+    if (witherUnlocked && cycleJustCompleted) {
+      const atDmg = player.atDmgBuff > player.baseAtDamage ? player.atDmgBuff : player.baseAtDamage
+      if (pk === 'p1') p2Poison += atDmg
+      else             p1Poison += atDmg
+    }
+    // GALL — track toggled Good Reads with AT or SP
+    const isToggledGoodRead = readActive && read === 'good' && (move === 'AT' || move === 'SP')
+    if (isToggledGoodRead) {
+      wrackReadTriggers++
+      if (wrackReadTriggers >= 4) gallUnlocked = true
+    }
+    if (gallUnlocked && isToggledGoodRead) {
+      if (pk === 'p1') p2Poison += 3
+      else             p1Poison += 3
+    }
+    // Write updates back to the player object
+    if (pk === 'p1') {
+      Object.assign(newP1, { wrackChainTriggers, wrackCycleTriggers, wrackReadTriggers, festeringUnlocked, witherUnlocked, gallUnlocked })
+    } else {
+      Object.assign(newP2, { wrackChainTriggers, wrackCycleTriggers, wrackReadTriggers, festeringUnlocked, witherUnlocked, gallUnlocked })
+    }
+  }
 
   // ── Log entry ─────────────────────────────────────────────────────────────
   const turn = gameState.log.length + 1

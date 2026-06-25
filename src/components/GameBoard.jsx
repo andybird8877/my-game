@@ -21,9 +21,12 @@ const TIPS = {
   moveBl:      { name: 'Block',        description: 'A defensive stance. Deals small chip damage to an attacker. Beats Attack but loses to Special.' },
   moveDodge:   { name: 'Dodge',        description: 'Cairan\'s unique counter. First dodge absorbs all incoming chip damage. Each consecutive dodge launches a counter-attack for double the attacker\'s AT damage.' },
   moveFF:      { name: 'Force Field',  description: 'Mourne\'s defensive barrier. Absorbs chip damage into the Force Field accumulator instead of taking HP loss. When the accumulator reaches 10, the stored energy fires back at the opponent.' },
-  vaelJinx:   { name: 'JINX',        description: 'After unlocking, any Good Clash (without Read active) also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',              unlock: 'Land SP disable 2 times.' },
-  vaelRegen:  { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 Good Clashes (without Read active).' },
-  vaelEvade:  { name: 'Evade',       description: 'Unlocks after 2 committed Read-toggle wins. Once unlocked, evade chance scales with remaining HP, from 5% at full health up to 25% near death.',                                        unlock: 'Land 2 Good Reads (with Read active).' },
+  vaelJinx:      { name: 'JINX',        description: 'After unlocking, any Good Clash (without Read active) also randomly disables one of the opponent\'s moves for their next turn — same effect as the SP-vs-BL trigger.',              unlock: 'Land SP disable 2 times.' },
+  vaelRegen:     { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 Good Clashes (without Read active).' },
+  vaelEvade:     { name: 'Evade',       description: 'Unlocks after 2 committed Read-toggle wins. Once unlocked, evade chance scales with remaining HP, from 5% at full health up to 25% near death.',                                        unlock: 'Land 2 Good Reads (with Read active).' },
+  wrackFestering: { name: 'FESTER',  description: 'Once unlocked, any hit from a chain of 4+ also applies poison equal to the current chain length.',  unlock: 'Reach an AT or SP chain of 4+ on 4 separate turns.' },
+  wrackWither:    { name: 'WITHER',     description: 'Once unlocked, each time Wrack completes a combat cycle, poison equal to his base AT damage is applied.',                                                                               unlock: 'Complete the combat cycle 4 times.' },
+  wrackGall:      { name: 'GALL',       description: 'Once unlocked, each toggled Good Read with AT or SP applies +3 bonus poison on top.',                                                                                                   unlock: 'Land 4 toggled Good Reads with AT or SP.' },
 }
 
 // ─── Sound ───────────────────────────────────────────────────────────────────
@@ -316,6 +319,45 @@ function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
   )
 }
 
+function WrackAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
+  const [show, setShow] = useState(false)
+  const [pos,  setPos]  = useState({ x: 0, y: 0 })
+  const timer = useRef(null)
+  const r = 34, cx = 40, cy = 40
+  const circumference = 2 * Math.PI * r
+  const filled  = unlocked ? maxCount : Math.min(count, maxCount)
+  const dashLen = filled > 0 ? (circumference / maxCount) * filled : 0
+  const accent  = '#88ee22'
+  const stroke  = unlocked ? accent : '#446611'
+  return (
+    <div
+      style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+    >
+      <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
+        {filled > 0 && (
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke={stroke} strokeWidth={unlocked ? 5 : 4}
+            strokeDasharray={`${dashLen} ${circumference}`}
+            strokeLinecap="butt"
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={unlocked ? { filter: `drop-shadow(0 0 5px ${accent})` } : undefined}
+          />
+        )}
+        {unlocked
+          ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold">✓</text>
+          : <text x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fill="#555">{count}/{maxCount}</text>
+        }
+      </svg>
+      <div style={{ fontSize: 9, color: unlocked ? accent : '#666', letterSpacing: 0.5, textAlign: 'center', marginTop: 3 }}>{label}</div>
+      {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
+    </div>
+  )
+}
+
 // ─── Ult Meter ────────────────────────────────────────────────────────────────
 // Single progress ring showing combined ULT unlock progress across all 3 conditions
 
@@ -568,6 +610,7 @@ export default function GameBoard() {
   const [evadeFlashes, setEvadeFlashes]               = useState({ p1: false, p2: false, key: 0 })
   const [disableFlashes, setDisableFlashes]           = useState({ p1: null, p2: null, key: 0 })
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
+  const [flowAlert, setFlowAlert]                     = useState(null)
   const forceCritRef = useRef(false)
 
   // ── Online multiplayer ────────────────────────────────────────────────────
@@ -622,6 +665,41 @@ export default function GameBoard() {
       playSound(SFX.victory, 0.8)
     }
   }, [isGameOver, animating, ultAnimating, collapseAnimating, betweenTurns])
+
+  // ── Flow / Zen / GOD MODE alert banners ──────────────────────────────────
+  const prevFlowLogLenRef = useRef(0)
+  useEffect(() => {
+    if (!state?.lastTurn || state.lastTurn.isUlt) return
+    const newLen = state.log.length
+    if (newLen <= prevFlowLogLenRef.current) return
+    prevFlowLogLenRef.current = newLen
+    const lt = state.lastTurn
+    const nameP1 = state.p1Character?.name ?? 'P1'
+    const nameP2 = state.p2Character?.name ?? 'P2'
+    const alerts = []
+    // Activations — highest tier only per player
+    if      (lt.p1GodModeActivated) alerts.push({ msg: `⚡ ${nameP1} — GOD MODE`,      color: '#fff', glow: '#ffd700, #ffaa00', size: 58 })
+    else if (lt.p1ZenActivated)     alerts.push({ msg: `✦ ${nameP1} — ZEN STATE`,       color: '#4df', glow: '#4df, #0af',       size: 50 })
+    else if (lt.p1FlowActivated)    alerts.push({ msg: `${nameP1} — FLOW STATE`,         color: '#f80', glow: '#f80, #f40',       size: 44 })
+    // Breaks — highest tier per player
+    if      (lt.p1GodModeBroken)    alerts.push({ msg: `${nameP1} — GOD MODE BROKEN`,   color: '#666', glow: '#333, #111',       size: 34 })
+    else if (lt.p1ZenBroken)        alerts.push({ msg: `${nameP1} — ZEN BROKEN`,         color: '#666', glow: '#333, #111',       size: 34 })
+    else if (lt.p1FlowBroken)       alerts.push({ msg: `${nameP1} — FLOW BROKEN`,        color: '#666', glow: '#333, #111',       size: 34 })
+    if      (lt.p2GodModeActivated) alerts.push({ msg: `⚡ ${nameP2} — GOD MODE`,      color: '#fff', glow: '#ffd700, #ffaa00', size: 58 })
+    else if (lt.p2ZenActivated)     alerts.push({ msg: `✦ ${nameP2} — ZEN STATE`,       color: '#4df', glow: '#4df, #0af',       size: 50 })
+    else if (lt.p2FlowActivated)    alerts.push({ msg: `${nameP2} — FLOW STATE`,         color: '#f80', glow: '#f80, #f40',       size: 44 })
+    if      (lt.p2GodModeBroken)    alerts.push({ msg: `${nameP2} — GOD MODE BROKEN`,   color: '#666', glow: '#333, #111',       size: 34 })
+    else if (lt.p2ZenBroken)        alerts.push({ msg: `${nameP2} — ZEN BROKEN`,         color: '#666', glow: '#333, #111',       size: 34 })
+    else if (lt.p2FlowBroken)       alerts.push({ msg: `${nameP2} — FLOW BROKEN`,        color: '#666', glow: '#333, #111',       size: 34 })
+    const SHOW_AT = 2300
+    const GAP     = 2000
+    const HOLD    = 1800
+    alerts.forEach((alert, i) => {
+      const k = Date.now() + i
+      setTimeout(() => setFlowAlert({ ...alert, key: k }), SHOW_AT + i * GAP)
+      setTimeout(() => setFlowAlert(f => f?.key === k ? null : f), SHOW_AT + HOLD + i * GAP)
+    })
+  }, [state?.log?.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Socket ────────────────────────────────────────────────────────────────
 
@@ -1173,6 +1251,9 @@ export default function GameBoard() {
     } else if (type === 'vael_regen') {
       color = '#c8e040'
       text  = `${playerName} regenerated +${heal} HP`
+    } else if (type === 'poison') {
+      color = '#44dd44'
+      text  = `${playerName} ☠ POISON — ${damage} damage`
     }
 
     if (!text) return null
@@ -1234,6 +1315,14 @@ export default function GameBoard() {
         stat: `${disables} disables × ${clashes} Good Clashes = ${actual} dmg`,
       }
     }
+    if (player.hasWrack) {
+      const poisonDealt = player.wrackPoisonDealt ?? 0
+      return {
+        name: 'OUTBREAK',
+        description: 'Wrack unleashes all accumulated rot — total poison damage dealt this match fires as a single direct hit.',
+        stat: `Total poison dealt: ${poisonDealt} dmg`,
+      }
+    }
     // Default: Cairan / ASSASSINATE
     const baseAt = player.baseAtDamage ?? AT_DAMAGE
     const baseSp = player.baseSpDamage ?? SP_DAMAGE
@@ -1264,6 +1353,19 @@ export default function GameBoard() {
     )}
     {activeEffect?.type === 'announce' && (
       <div key={activeEffect.key} className="unlock-text">{activeEffect.message}</div>
+    )}
+    {flowAlert && (
+      <div
+        key={flowAlert.key}
+        className="flow-alert"
+        style={{
+          fontSize: flowAlert.size,
+          color: flowAlert.color,
+          textShadow: `0 2px 8px #000, 0 0 18px ${flowAlert.glow.split(',')[0]}, 0 0 40px ${flowAlert.glow.split(',')[1] ?? flowAlert.glow.split(',')[0]}`,
+        }}
+      >
+        {flowAlert.msg}
+      </div>
     )}
     <div className="game-container" style={{ maxWidth: 620, margin: '40px auto', fontFamily: 'monospace', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
       <div className="panels-row" style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 24 }}>
@@ -1474,6 +1576,14 @@ export default function GameBoard() {
               <VaelAbilityWheel count={state.p1.vaelToggledGoodReads} unlocked={state.p1.vaelEvadeUnlocked}  label="Evade" maxCount={2} tip={TIPS.vaelEvade} />
             </div>
           )}
+          {/* Ability progress wheels — Wrack */}
+          {state.p1.hasWrack && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+              <WrackAbilityWheel count={state.p1.wrackChainTriggers} unlocked={state.p1.festeringUnlocked} label="FESTER" maxCount={4} tip={TIPS.wrackFestering} />
+              <WrackAbilityWheel count={state.p1.wrackCycleTriggers} unlocked={state.p1.witherUnlocked}    label="WITHER"    maxCount={4} tip={TIPS.wrackWither} />
+              <WrackAbilityWheel count={state.p1.wrackReadTriggers}  unlocked={state.p1.gallUnlocked}      label="GALL"      maxCount={4} tip={TIPS.wrackGall} />
+            </div>
+          )}
           {/* Stat-up flashes */}
           <div style={{ minHeight: 14, marginTop: 2 }}>
             {statUpFlashes.p1ke && <div key={`p1ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
@@ -1487,7 +1597,7 @@ export default function GameBoard() {
                 ultGoodReads={state.p1.ultGoodReads ?? 0}
                 ultChainAchieved={!!state.p1.ultChainAchieved}
                 cycleLit={state.p1.cycleLit}
-                ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
+                ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : state.p1.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}
                 onClick={!isOnline ? handleUlt : (online.myIndex === 0 ? handleOnlineUlt : null)}
                 disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
                 tip={ultTip(state.p1)}
@@ -1692,6 +1802,14 @@ export default function GameBoard() {
               <VaelAbilityWheel count={state.p2.vaelDisablesLanded}   unlocked={state.p2.jinxUnlocked}       label="JINX"  maxCount={2} tip={TIPS.vaelJinx} />
               <VaelAbilityWheel count={state.p2.vaelNormalGoodReads}  unlocked={state.p2.vaelRegenUnlocked}  label="Regen" maxCount={3} tip={TIPS.vaelRegen} />
               <VaelAbilityWheel count={state.p2.vaelToggledGoodReads} unlocked={state.p2.vaelEvadeUnlocked}  label="Evade" maxCount={2} tip={TIPS.vaelEvade} />
+            </div>
+          )}
+          {/* Ability progress wheels — Wrack P2 */}
+          {state.p2.hasWrack && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+              <WrackAbilityWheel count={state.p2.wrackChainTriggers} unlocked={state.p2.festeringUnlocked} label="FESTER" maxCount={4} tip={TIPS.wrackFestering} />
+              <WrackAbilityWheel count={state.p2.wrackCycleTriggers} unlocked={state.p2.witherUnlocked}    label="WITHER"    maxCount={4} tip={TIPS.wrackWither} />
+              <WrackAbilityWheel count={state.p2.wrackReadTriggers}  unlocked={state.p2.gallUnlocked}      label="GALL"      maxCount={4} tip={TIPS.wrackGall} />
             </div>
           )}
           {/* Stat-up flashes */}

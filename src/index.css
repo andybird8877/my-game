@@ -339,6 +339,26 @@
   animation: unlockAnnounce 2s ease-in-out forwards;
 }
 
+@keyframes flowAlertAnim {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2)  rotate(-3deg); letter-spacing: 0px; }
+  14%  { opacity: 1; transform: translate(-50%, -50%) scale(1.35) rotate(1deg);  letter-spacing: 8px; }
+  44%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1)  rotate(0deg);  letter-spacing: 6px; }
+  75%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05);               letter-spacing: 5px; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.88);               letter-spacing: 0px; }
+}
+
+.flow-alert {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  font-weight: bold;
+  font-family: monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 52;
+  animation: flowAlertAnim 1.8s ease-in-out forwards;
+}
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;

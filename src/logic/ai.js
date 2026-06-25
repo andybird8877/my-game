@@ -76,9 +76,15 @@ export function getAiMove(gameState) {
   const streakBeingPunished = streakMove && punishments[streakMove] >= 2
   const inSpamStreak = streakMove && !streakBeingPunished
 
-  // READ: only when fairly confident, never mid-streak
+  // READ: only when fairly confident, never mid-streak.
+  // When player is in flow/zen/god mode, read aggressively to try to break it.
+  const p1InFlow = p1.flowState || p1.zenState || p1.godModeState
   let readChance = 0
-  if (!inSpamStreak) {
+  if (p1InFlow) {
+    // Flow-breaking priority: high base chance that scales with tier
+    const tierBoost = p1.godModeState ? 0.85 : p1.zenState ? 0.75 : 0.65
+    readChance = tierBoost
+  } else if (!inSpamStreak) {
     let eff = confidence
     if (p1IsOneAway) eff = Math.min(1, eff + 0.25)
     const lastTwo = recent.slice(-2)
