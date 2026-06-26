@@ -829,6 +829,10 @@ export default function GameBoard() {
   const forceCritRef = useRef(false)
   const [cpuAlwaysBlock, setCpuAlwaysBlock] = useState(false)
   const [hitNumbers, setHitNumbers] = useState({ p1: null, p2: null, key: 0 })
+  const [devUnlocked, setDevUnlocked] = useState(false)
+  const [devPrompt, setDevPrompt]     = useState(false)
+  const [devInput, setDevInput]       = useState('')
+  const [devError, setDevError]       = useState(false)
 
   // ── BGM ───────────────────────────────────────────────────────────────────
   const [bgmVolume, setBgmVolume] = useState(0.25)
@@ -2253,16 +2257,57 @@ export default function GameBoard() {
         />
         <span style={{ fontSize: 11, color: '#555', width: 28 }}>{Math.round(bgmVolume * 100)}%</span>
       </div>
-      <div style={{ marginTop: 10, fontSize: 10, color: '#555', fontFamily: 'monospace' }}>
-        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={cpuAlwaysBlock}
-            onChange={e => setCpuAlwaysBlock(e.target.checked)}
-            style={{ accentColor: '#f80' }}
-          />
-          <span style={{ color: cpuAlwaysBlock ? '#f80' : '#555' }}>DEV: CPU always block</span>
-        </label>
+      <div style={{ marginTop: 10, fontFamily: 'monospace' }}>
+        {!devUnlocked && !devPrompt && (
+          <button
+            onClick={() => { setDevPrompt(true); setDevInput(''); setDevError(false) }}
+            style={{ fontSize: 10, color: '#333', background: 'none', border: '1px solid #222', padding: '4px 10px', cursor: 'pointer', letterSpacing: 1 }}
+          >
+            DEV
+          </button>
+        )}
+        {devPrompt && !devUnlocked && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              autoFocus
+              type="password"
+              value={devInput}
+              onChange={e => { setDevInput(e.target.value); setDevError(false) }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  if (devInput === 'angry-chicken') { setDevUnlocked(true); setDevPrompt(false) }
+                  else { setDevError(true); setDevInput('') }
+                }
+                if (e.key === 'Escape') { setDevPrompt(false); setDevInput('') }
+              }}
+              placeholder="password"
+              style={{ fontSize: 10, background: '#111', border: `1px solid ${devError ? '#f44' : '#333'}`, color: '#aaa', padding: '4px 8px', fontFamily: 'monospace', width: 120 }}
+            />
+            <button
+              onClick={() => {
+                if (devInput === 'angry-chicken') { setDevUnlocked(true); setDevPrompt(false) }
+                else { setDevError(true); setDevInput('') }
+              }}
+              style={{ fontSize: 10, color: '#555', background: 'none', border: '1px solid #333', padding: '4px 8px', cursor: 'pointer', fontFamily: 'monospace' }}
+            >
+              OK
+            </button>
+          </div>
+        )}
+        {devUnlocked && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 10px', border: '1px solid #2a2a2a', background: '#0a0a0a' }}>
+            <div style={{ fontSize: 9, color: '#444', letterSpacing: 2, marginBottom: 2 }}>DEV TOOLS</div>
+            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+              <input
+                type="checkbox"
+                checked={cpuAlwaysBlock}
+                onChange={e => setCpuAlwaysBlock(e.target.checked)}
+                style={{ accentColor: '#f80' }}
+              />
+              <span style={{ color: cpuAlwaysBlock ? '#f80' : '#555' }}>CPU always block</span>
+            </label>
+          </div>
+        )}
       </div>
     </div>
     </>
