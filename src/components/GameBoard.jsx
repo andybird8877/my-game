@@ -45,6 +45,7 @@ const sfxRand = arr => arr[Math.floor(Math.random() * arr.length)]
 function playSound(src, volume = 1) {
   try { const a = new Audio(src); a.volume = volume; a.play().catch(() => {}) } catch {}
 }
+function playMenuClick() { playSound('/audio/menu-click.m4a', 0.7) }
 
 // ─── Tooltip UI ───────────────────────────────────────────────────────────────
 
@@ -99,13 +100,223 @@ function TooltipWrap({ tip, unlocked = true, children }) {
 const AFFINITY_COLOR = { good: '#5af', evil: '#f55' }
 const CLASS_ICON     = { warrior: '⚔️', mage: '✨', tank: '🛡️' }
 
-function CharacterSelect({ step, p1Char, onSelect }) {
+// ─── Tutorial Screen ──────────────────────────────────────────────────────────
+
+const TUTORIAL_CARDS = [
+  {
+    title: 'WHAT IS COUNTERCYCLE',
+    body: 'CounterCycle is a turn-based fighting game. Each round, both players pick a move simultaneously. You don\'t see your opponent\'s choice until it resolves. Read them. Outplay them. Win.',
+    images: [],
+  },
+  {
+    title: 'THE THREE MOVES',
+    body: 'Every fighter has three moves: AT — Attack. Beats SP. BL — Block. Beats AT. SP — Special. Beats BL. It\'s a triangle. But it\'s not that simple.',
+    images: ['/card-2.png'],
+  },
+  {
+    title: 'THE READ TOGGLE',
+    body: 'Before picking a move, you can toggle READ ON. Correct prediction → Good Read. Bonus damage, effects, passives. Wrong prediction → Bad Read. You take extra damage instead.',
+    images: ['/card-3.1.png', '/card-3.2.png'],
+    imagesLayout: 'side-by-side',
+  },
+  {
+    title: 'PLAYSTYLE BRANCHES',
+    body: 'How you fight shapes how you grow. Chaining — repeat the same move to build pressure. Cycling — rotate through all three moves to stay unpredictable. Reading — use the Read Toggle to punish your opponent\'s patterns. Your character\'s passives unlock along these paths.',
+    images: [],
+  },
+  {
+    title: 'PASSIVES',
+    body: 'Each character has 3 passives that unlock mid-match. They don\'t start active — you earn them through play. Watch for announcements during the fight. When a passive unlocks, your toolkit changes.',
+    images: ['/card-5.png'],
+  },
+  {
+    title: 'FLOW STATE',
+    body: 'Land 2 Good Reads in a row to enter FLOW STATE. While in Flow, your damage is multiplied. Lose your rhythm and it breaks. Flow State is the engine everything else feeds into.',
+    images: ['/card-6.png'],
+  },
+  {
+    title: 'YOU\'RE READY',
+    body: 'Pick a fighter. Learn their style. The tutorial ends here — the rest, you figure out.',
+    images: [],
+    done: true,
+  },
+]
+
+function TutorialScreen({ onDone }) {
+  const [index, setIndex] = useState(0)
+  const card = TUTORIAL_CARDS[index]
+  const total = TUTORIAL_CARDS.length
+
+  const btnStyle = {
+    padding: '12px 28px', fontSize: 12, letterSpacing: 3,
+    background: '#111', border: '1px solid #555', color: '#ccc',
+    cursor: 'pointer', fontFamily: 'monospace',
+  }
+  const btnActiveStyle = { ...btnStyle, border: '1px solid #5af', color: '#5af' }
+
+  return (
+    <div style={{
+      maxWidth: 520, margin: '60px auto', fontFamily: 'monospace',
+      color: '#fff', padding: '0 20px', minHeight: '80vh',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Counter */}
+      <div style={{ textAlign: 'right', fontSize: 11, color: '#555', letterSpacing: 2, marginBottom: 24 }}>
+        {index + 1} / {total}
+      </div>
+
+      {/* Card */}
+      <div style={{
+        flex: 1, border: '1px solid #2a2a2a', background: '#0d0d0d',
+        padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: 24,
+      }}>
+        {/* Title */}
+        <div style={{ fontSize: 13, letterSpacing: 4, color: '#5af', fontWeight: 'bold' }}>
+          {card.title}
+        </div>
+
+        {/* Images */}
+        {card.images.length === 1 && (
+          <img
+            src={card.images[0]}
+            alt=""
+            style={{ width: '100%', maxHeight: 260, objectFit: 'contain', display: 'block' }}
+          />
+        )}
+        {card.imagesLayout === 'side-by-side' && card.images.length === 2 && (
+          <div style={{ display: 'flex', gap: 12 }}>
+            {card.images.map((src, i) => (
+              <img key={i} src={src} alt="" style={{ flex: 1, width: 0, maxHeight: 220, objectFit: 'contain' }} />
+            ))}
+          </div>
+        )}
+
+        {/* Body */}
+        <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.8 }}>
+          {card.body}
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+        <button
+          onClick={() => setIndex(i => i - 1)}
+          disabled={index === 0}
+          style={{ ...btnStyle, opacity: index === 0 ? 0.25 : 1, cursor: index === 0 ? 'default' : 'pointer' }}
+        >
+          ← PREV
+        </button>
+
+        {card.done ? (
+          <button onClick={onDone} style={btnActiveStyle}>
+            DONE
+          </button>
+        ) : (
+          <button onClick={() => setIndex(i => i + 1)} style={btnActiveStyle}>
+            NEXT →
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Floating Damage Number ───────────────────────────────────────────────────
+
+function DamageNumber({ value }) {
+  return (
+    <div style={{
+      position: 'absolute',
+      left: '50%', bottom: '60%',
+      transform: 'translateX(-50%)',
+      fontFamily: 'monospace',
+      fontWeight: 'bold',
+      fontSize: 36,
+      color: '#ff3333',
+      textShadow: '0 0 12px #ff0000, 0 2px 4px #000',
+      pointerEvents: 'none',
+      userSelect: 'none',
+      animation: 'dmgRise 3s ease-out forwards',
+      zIndex: 10,
+      whiteSpace: 'nowrap',
+    }}>
+      -{value}
+      <style>{`
+        @keyframes dmgRise {
+          0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+          67%  { opacity: 1; transform: translateX(-50%) translateY(-60px); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-80px); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+function CharSelectSplash({ char, onDone }) {
+  const [phase, setPhase] = useState('in') // 'in' | 'hold' | 'out'
+  const accent = AFFINITY_COLOR[char.affinity]
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('hold'), 300)
+    const t2 = setTimeout(() => setPhase('out'),  1600)
+    const t3 = setTimeout(() => onDone(),         2000)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [])
+
+  const opacity  = phase === 'out' ? 0 : 1
+  const scale    = phase === 'in'  ? 0.7 : phase === 'out' ? 1.08 : 1
+  const bgOpacity = phase === 'out' ? 0 : 0.85
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'all',
+      backgroundColor: `rgba(0,0,0,${bgOpacity})`,
+      transition: 'background-color 0.35s ease',
+    }}>
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+        opacity, transform: `scale(${scale})`,
+        transition: phase === 'in' ? 'opacity 0.25s ease, transform 0.3s cubic-bezier(0.175,0.885,0.32,1.275)'
+                                   : 'opacity 0.35s ease, transform 0.35s ease',
+      }}>
+        <img
+          src={char.portrait}
+          alt={char.name}
+          style={{
+            width: 390, height: 390,
+            objectFit: 'cover',
+            border: `3px solid ${accent}`,
+            boxShadow: `0 0 40px ${accent}88`,
+          }}
+        />
+        <div style={{
+          fontFamily: 'monospace', fontSize: 22, fontWeight: 'bold',
+          letterSpacing: 4, color: accent,
+          textShadow: `0 0 20px ${accent}`,
+        }}>
+          {char.name.toUpperCase()}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CharacterSelect({ step, p1Char, onSelect, onPreview }) {
   const [hovered, setHovered] = useState(null)
+  const [splash, setSplash]   = useState(null) // char being shown, or null
 
   // Only show named characters (those with a portrait); generic placeholders stay hidden
   const named = CHARACTERS.filter(c => c.portrait)
   const good  = named.filter(c => c.affinity === 'good')
   const evil  = named.filter(c => c.affinity === 'evil')
+
+  function handleCardClick(char) {
+    if (splash) return
+    onPreview?.(char)
+    setSplash(char)
+  }
 
   function renderCard(char) {
     const accent    = AFFINITY_COLOR[char.affinity]
@@ -113,7 +324,7 @@ function CharacterSelect({ step, p1Char, onSelect }) {
     return (
       <div
         key={char.id}
-        onClick={() => onSelect(char)}
+        onClick={() => handleCardClick(char)}
         onMouseEnter={() => setHovered(char.id)}
         onMouseLeave={() => setHovered(null)}
         style={{
@@ -165,12 +376,15 @@ function CharacterSelect({ step, p1Char, onSelect }) {
   }
 
   return (
+    <>
+    {splash && <CharSelectSplash char={splash} onDone={() => { onSelect(splash); setSplash(null) }} />}
     <div style={{
       maxWidth: 640,
       margin: '40px auto',
       fontFamily: 'monospace',
       color: '#fff',
       padding: '0 16px',
+      pointerEvents: splash ? 'none' : 'auto',
     }}>
       <h2 style={{ textAlign: 'center', marginBottom: 24, fontSize: 18, letterSpacing: 2, color: '#ccc' }}>
         {step === 1 ? 'P1 — CHOOSE YOUR CHARACTER' : 'P2 — CHOOSE YOUR CHARACTER'}
@@ -200,6 +414,7 @@ function CharacterSelect({ step, p1Char, onSelect }) {
         </>
       )}
     </div>
+    </>
   )
 }
 
@@ -612,6 +827,56 @@ export default function GameBoard() {
   const [deathEffectsReady, setDeathEffectsReady]     = useState(false)
   const [flowAlert, setFlowAlert]                     = useState(null)
   const forceCritRef = useRef(false)
+  const [cpuAlwaysBlock, setCpuAlwaysBlock] = useState(false)
+  const [hitNumbers, setHitNumbers] = useState({ p1: null, p2: null, key: 0 })
+
+  // ── BGM ───────────────────────────────────────────────────────────────────
+  const [bgmVolume, setBgmVolume] = useState(0.25)
+  const bgmRef = useRef(null)
+  const bgmStarted = useRef(false)
+
+  useEffect(() => {
+    const audio = new Audio('/audio/bgm-2.wav')
+    audio.loop = true
+    audio.volume = bgmVolume
+    bgmRef.current = audio
+
+    function startBgm() {
+      if (bgmStarted.current) return
+      bgmStarted.current = true
+      audio.play().catch(() => {})
+      document.removeEventListener('click', startBgm)
+      document.removeEventListener('keydown', startBgm)
+    }
+
+    document.addEventListener('click', startBgm)
+    document.addEventListener('keydown', startBgm)
+
+    return () => {
+      audio.pause(); audio.src = ''
+      document.removeEventListener('click', startBgm)
+      document.removeEventListener('keydown', startBgm)
+    }
+  }, [])
+  useEffect(() => {
+    if (bgmRef.current) bgmRef.current.volume = bgmVolume
+  }, [bgmVolume])
+
+  // ── Fight banner ──────────────────────────────────────────────────────────
+  const [fightBanner, setFightBanner] = useState(false)
+  const prevStateRef = useRef(null)
+  useEffect(() => {
+    const wasNull = prevStateRef.current === null
+    prevStateRef.current = state
+    if (state && wasNull) {
+      const t1 = setTimeout(() => {
+        setFightBanner(true)
+        playSound('/audio/VO/fight VO.wav', 1)
+      }, 500)
+      const t2 = setTimeout(() => setFightBanner(false), 3000)
+      return () => { clearTimeout(t1); clearTimeout(t2) }
+    }
+  }, [state])
 
   // ── Online multiplayer ────────────────────────────────────────────────────
   const [gameMode, setGameMode] = useState(null)   // null | 'offline' | 'online'
@@ -669,7 +934,8 @@ export default function GameBoard() {
   // ── Flow / Zen / GOD MODE alert banners ──────────────────────────────────
   const prevFlowLogLenRef = useRef(0)
   useEffect(() => {
-    if (!state?.lastTurn || state.lastTurn.isUlt) return
+    if (!state?.lastTurn) { prevFlowLogLenRef.current = 0; return }
+    if (state.lastTurn.isUlt) return
     const newLen = state.log.length
     if (newLen <= prevFlowLogLenRef.current) return
     prevFlowLogLenRef.current = newLen
@@ -691,6 +957,9 @@ export default function GameBoard() {
     if      (lt.p2GodModeBroken)    alerts.push({ msg: `${nameP2} — GOD MODE BROKEN`,   color: '#666', glow: '#333, #111',       size: 34 })
     else if (lt.p2ZenBroken)        alerts.push({ msg: `${nameP2} — ZEN BROKEN`,         color: '#666', glow: '#333, #111',       size: 34 })
     else if (lt.p2FlowBroken)       alerts.push({ msg: `${nameP2} — FLOW BROKEN`,        color: '#666', glow: '#333, #111',       size: 34 })
+    // Cleanse confirmations — follow the activation banner
+    if (lt.p1FlowCleansed) alerts.push({ msg: `✦ Negative effects cleansed for ${nameP1}`, color: '#aaffaa', glow: '#88ee22, #44aa00', size: 28 })
+    if (lt.p2FlowCleansed) alerts.push({ msg: `✦ Negative effects cleansed for ${nameP2}`, color: '#aaffaa', glow: '#88ee22, #44aa00', size: 28 })
     const SHOW_AT = 2300
     const GAP     = 2000
     const HOLD    = 1800
@@ -818,6 +1087,7 @@ export default function GameBoard() {
   }
 
   function handleOnlineCharSelect(char) {
+    playMenuClick()
     socketRef.current?.emit('select_char', { charId: char.id })
     setOnline(o => { const c = [...o.chars]; c[o.myIndex] = char.id; return { ...o, chars: c } })
   }
@@ -860,7 +1130,19 @@ export default function GameBoard() {
 
   // ── Character Select ──────────────────────────────────────────────────────
 
+  function playCharVO(char) {
+    const voMap = {
+      'Cairan Vex':  '/audio/VO/cairan vex VO.wav',
+      'Mourne':      '/audio/VO/mourne VO.wav',
+      'Vael Solace': '/audio/VO/vael solace VO.wav',
+      'Wrack':       '/audio/VO/wrack VO.wav',
+    }
+    const src = voMap[char.name]
+    if (src) new Audio(src).play()
+  }
+
   function handleCharSelect(char) {
+    playMenuClick()
     if (selectStep === 1) {
       setP1CharSel(char)
       setSelectStep(2)
@@ -877,22 +1159,41 @@ export default function GameBoard() {
         <div style={{ maxWidth: 380, margin: '100px auto', fontFamily: 'monospace', color: '#fff', textAlign: 'center', padding: '0 16px' }}>
           <img src="/countercycle-logo.png" alt="Countercycle" style={{ maxWidth: 320, width: '100%', marginBottom: 60, display: 'block', margin: '0 auto 60px' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <button onClick={() => setGameMode('offline')}
+            <button onClick={() => { playMenuClick(); setGameMode('offline') }}
               style={{ padding: '16px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #555', color: '#ccc', cursor: 'pointer' }}>
               VS AI
             </button>
-            <button onClick={() => setGameMode('online')}
+            <button onClick={() => { playMenuClick(); setGameMode('online') }}
               style={{ padding: '16px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
               PLAY ONLINE
             </button>
+            <button onClick={() => { playMenuClick(); setGameMode('tutorial') }}
+              style={{ padding: '16px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #555', color: '#ccc', cursor: 'pointer' }}>
+              TUTORIAL
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, justifyContent: 'center' }}>
+              <span style={{ fontSize: 11, color: '#666', letterSpacing: 1 }}>♪</span>
+              <input
+                type="range" min="0" max="1" step="0.01"
+                value={bgmVolume}
+                onChange={e => setBgmVolume(parseFloat(e.target.value))}
+                style={{ width: 100, accentColor: '#5af', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 11, color: '#555', width: 28, textAlign: 'left' }}>{Math.round(bgmVolume * 100)}%</span>
+            </div>
           </div>
         </div>
       )
     }
 
+    // Tutorial
+    if (gameMode === 'tutorial') {
+      return <TutorialScreen onDone={() => { playMenuClick(); setGameMode(null) }} />
+    }
+
     // Offline char select — existing flow
     if (gameMode === 'offline') {
-      return <CharacterSelect step={selectStep} p1Char={p1CharSel} onSelect={handleCharSelect} />
+      return <CharacterSelect step={selectStep} p1Char={p1CharSel} onSelect={handleCharSelect} onPreview={char => { playMenuClick(); playCharVO(char) }} />
     }
 
     // Online flow
@@ -915,6 +1216,7 @@ export default function GameBoard() {
           step={myIndex === 1 ? 2 : 1}
           p1Char={null}
           onSelect={handleOnlineCharSelect}
+          onPreview={char => { playMenuClick(); playCharVO(char) }}
         />
       )
     }
@@ -922,7 +1224,7 @@ export default function GameBoard() {
     // Lobby — menu / create / join / waiting
     return (
       <div style={{ maxWidth: 400, margin: '80px auto', fontFamily: 'monospace', color: '#fff', padding: '0 20px' }}>
-        <button onClick={() => { setGameMode(null); setOnline(o => ({ ...o, phase: 'menu', error: null })) }}
+        <button onClick={() => { playMenuClick(); setGameMode(null); setOnline(o => ({ ...o, phase: 'menu', error: null })) }}
           style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 11, marginBottom: 28, padding: 0, letterSpacing: 1 }}>
           ← BACK
         </button>
@@ -938,11 +1240,11 @@ export default function GameBoard() {
         {/* Create / Join buttons */}
         {(phase === 'menu' || phase === 'create') && !roomId && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button onClick={handleCreateRoom}
+            <button onClick={() => { playMenuClick(); handleCreateRoom() }}
               style={{ padding: '15px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
               CREATE ROOM
             </button>
-            <button onClick={() => setOnline(o => ({ ...o, phase: 'join', error: null }))}
+            <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'join', error: null })) }}
               style={{ padding: '15px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #555', color: '#ccc', cursor: 'pointer' }}>
               JOIN ROOM
             </button>
@@ -961,11 +1263,11 @@ export default function GameBoard() {
               autoFocus
               style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #555', color: '#fff', fontFamily: 'monospace', fontSize: 14, boxSizing: 'border-box' }}
             />
-            <button onClick={handleJoinRoom}
+            <button onClick={() => { playMenuClick(); handleJoinRoom() }}
               style={{ marginTop: 10, width: '100%', padding: '13px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
               JOIN
             </button>
-            <button onClick={() => setOnline(o => ({ ...o, phase: 'menu' }))}
+            <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'menu' })) }}
               style={{ marginTop: 8, width: '100%', padding: '8px 0', fontSize: 11, background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}>
               Cancel
             </button>
@@ -980,7 +1282,7 @@ export default function GameBoard() {
               {roomId}
             </div>
             <button
-              onClick={() => { navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              onClick={() => { playMenuClick(); navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
               style={{ padding: '10px 28px', fontSize: 12, letterSpacing: 2, background: copied ? '#0d2a0d' : '#111', border: `1px solid ${copied ? '#4f4' : '#5af'}`, color: copied ? '#4f4' : '#5af', cursor: 'pointer', marginBottom: 28 }}>
               {copied ? '✓  COPIED' : 'COPY INVITE LINK'}
             </button>
@@ -1007,7 +1309,7 @@ export default function GameBoard() {
   const dispP1Hp = displayedState ? displayedState.p1.hp : state.p1.hp
   const dispP2Hp = displayedState ? displayedState.p2.hp : state.p2.hp
 
-  // Build announcement steps from unlock events in lastTurn (Cairan + Leech)
+  // Build announcement steps from unlock events in lastTurn
   function buildUnlockSteps(newState) {
     const toStep = (name, prefix) => ({
       type: 'announce',
@@ -1016,6 +1318,12 @@ export default function GameBoard() {
         name === 'nimble'      ? 'NIMBLE UNLOCKED' :
         name === 'bloodletter' ? 'BLOODLETTER READY' :
         name === 'leech'       ? 'LEECH UNLOCKED' :
+        name === 'vaelJinx'    ? 'JINX UNLOCKED' :
+        name === 'vaelRegen'   ? 'REGEN UNLOCKED' :
+        name === 'vaelEvade'   ? 'EVADE UNLOCKED' :
+        name === 'fester'      ? 'FESTER UNLOCKED' :
+        name === 'wither'      ? 'WITHER UNLOCKED' :
+        name === 'gall'        ? 'GALL UNLOCKED' :
         name.toUpperCase() + ' UNLOCKED'
       ),
       stateAfter: null,
@@ -1044,7 +1352,9 @@ export default function GameBoard() {
     if (animating) return
     // AI fires ULT instead of a normal turn when ready
     if (state.p2.ultimateReady) { handleAiUlt(); return }
-    const { move: p2Move, useRead: p2ReadActive } = getAiMove(state)
+    const aiResult = getAiMove(state)
+    const p2Move = cpuAlwaysBlock ? 'BL' : aiResult.move
+    const p2ReadActive = cpuAlwaysBlock ? false : aiResult.useRead
     const newState = processTurn(state, p1Move, p2Move, p1ReadActive, p2ReadActive, {
       p1ForceCrit: forceCritRef.current,
     })
@@ -1087,6 +1397,14 @@ export default function GameBoard() {
       const disableKey = Date.now() + 1
       setTimeout(() => setDisableFlashes({ p1: p1Disabled, p2: p2Disabled, key: disableKey }), 2000)
       setTimeout(() => setDisableFlashes(s => s.key === disableKey ? { p1: null, p2: null, key: 0 } : s), 4000)
+    }
+    // Hit damage numbers
+    const p1Dmg = lt.p1Damage ?? 0
+    const p2Dmg = lt.p2Damage ?? 0
+    if (p1Dmg > 0 || p2Dmg > 0) {
+      const dmgKey = Date.now()
+      setTimeout(() => setHitNumbers({ p1: p1Dmg || null, p2: p2Dmg || null, key: dmgKey }), 2000)
+      setTimeout(() => setHitNumbers(h => h.key === dmgKey ? { p1: null, p2: null, key: 0 } : h), 5000)
     }
     // Sounds
     const anyKO = newState.p1.hp === 0 || newState.p2.hp === 0
@@ -1282,6 +1600,7 @@ export default function GameBoard() {
     if (!player.litMoves?.[key]) return undefined
     if (player.hasDodge)  return 'lit-crimson'
     if (player.hasMourne) return 'lit-violet'
+    if (player.hasWrack)  return 'lit-green'
     return 'lit-gold'
   }
 
@@ -1338,10 +1657,48 @@ export default function GameBoard() {
 
   return (
     <>
+    {fightBanner && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9998,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'all',
+        background: 'rgba(0,0,0,0.55)',
+        animation: 'fightBannerFade 1.5s ease forwards',
+      }}>
+        <div style={{
+          fontFamily: 'monospace',
+          fontSize: 'clamp(64px, 18vw, 140px)',
+          fontWeight: 'bold',
+          letterSpacing: 16,
+          color: '#fff',
+          textShadow: '0 0 30px #fff, 0 0 60px #e03050, 0 0 120px #e03050',
+          animation: 'fightBannerScale 1.5s ease forwards',
+        }}>
+          FIGHT
+        </div>
+      </div>
+    )}
+    {fightBanner && (
+      <style>{`
+        @keyframes fightBannerFade {
+          0%   { opacity: 0 }
+          15%  { opacity: 1 }
+          70%  { opacity: 1 }
+          100% { opacity: 0 }
+        }
+        @keyframes fightBannerScale {
+          0%   { transform: scale(0.6) }
+          20%  { transform: scale(1.05) }
+          35%  { transform: scale(1) }
+          80%  { transform: scale(1) }
+          100% { transform: scale(1.15) }
+        }
+      `}</style>
+    )}
     {ultAnimating && <div className="ult-screen-overlay" />}
-    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}</div>}
+    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : myPlayer.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}</div>}
     {p2UltAnimating && <div className="ult-screen-overlay" />}
-    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}</div>}
+    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}</div>}
     {collapseAnimating && <div className="collapse-overlay" />}
     {collapseAnimating && <div className="collapse-title">COLLAPSE</div>}
     {collapseAnimating && collapseData && (
@@ -1380,6 +1737,7 @@ export default function GameBoard() {
           )}
           <div className={['portrait-wrap', collapseAnimating ? (collapseUser === 'p1' ? 'collapse-charge' : 'collapse-hit') : ultAnimating ? 'ult-charge' : p2UltAnimating ? 'ult-hit' : animating ? 'p1-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, display: 'inline-block' }}>
+            {hitNumbers.p1 && <DamageNumber key={`p1-${hitNumbers.key}`} value={hitNumbers.p1} />}
             <img
               src={state.p1Character?.portrait ?? '/src/img/tyrone.png'}
               alt="P1"
@@ -1443,8 +1801,8 @@ export default function GameBoard() {
                       onClick={isP1Controllable && !moveDisabled ? () => isOnline ? handleOnlineMove(move) : handleMove(move) : undefined}
                       style={{
                         width: '100%', aspectRatio: '1', borderRadius: '50%',
-                        backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : p1Accent) : '#333',
-                        border: '2px solid ' + (state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#b06cff' : p1Accent) : '#555'),
+                        backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : state.p1.hasWrack ? '#88ee22' : p1Accent) : '#333',
+                        border: '2px solid ' + (state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#b06cff' : state.p1.hasWrack ? '#88ee22' : p1Accent) : (state.p1.hasWrack ? '#335511' : '#555')),
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
                         fontSize: 9, fontWeight: 'bold', color: state.p1.cycleLit[move] ? '#000' : '#666',
                         textAlign: 'center', lineHeight: 1.2,
@@ -1470,7 +1828,7 @@ export default function GameBoard() {
             const readDisabled = animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)
             const isP1Controllable = !isOnline || online.myIndex === 0
             if (!isP1Controllable) return null
-            const toggle = () => { if (!readDisabled) setP1ReadActive(r => !r) }
+            const toggle = () => { if (!readDisabled) { playMenuClick(); setP1ReadActive(r => !r) } }
             return (
               <div
                 role="switch"
@@ -1628,6 +1986,7 @@ export default function GameBoard() {
           )}
           <div className={['portrait-wrap', collapseAnimating ? (collapseUser === 'p2' ? 'collapse-charge' : 'collapse-hit') : ultAnimating ? 'ult-hit' : p2UltAnimating ? 'ult-charge' : animating ? 'p2-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, marginLeft: 'auto', display: 'block' }}>
+            {hitNumbers.p2 && <DamageNumber key={`p2-${hitNumbers.key}`} value={hitNumbers.p2} />}
             <img
               src={state.p2Character?.portrait ?? '/src/img/stotch.png'}
               alt="P2"
@@ -1685,8 +2044,8 @@ export default function GameBoard() {
                       onClick={isP2Controllable && !moveDisabled ? () => handleOnlineMove(move) : undefined}
                       style={{
                         width: '100%', aspectRatio: '1', borderRadius: '50%',
-                        backgroundColor: state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#7020c0' : p2Accent) : '#333',
-                        border: '2px solid ' + (state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#b06cff' : p2Accent) : '#555'),
+                        backgroundColor: state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#7020c0' : state.p2.hasWrack ? '#88ee22' : p2Accent) : '#333',
+                        border: '2px solid ' + (state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#b06cff' : state.p2.hasWrack ? '#88ee22' : p2Accent) : (state.p2.hasWrack ? '#335511' : '#555')),
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
                         fontSize: 9, fontWeight: 'bold', color: state.p2.cycleLit[move] ? '#000' : '#666',
                         textAlign: 'center', lineHeight: 1.2,
@@ -1825,7 +2184,7 @@ export default function GameBoard() {
                 ultGoodReads={state.p2.ultGoodReads ?? 0}
                 ultChainAchieved={!!state.p2.ultChainAchieved}
                 cycleLit={state.p2.cycleLit}
-                ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : 'ASSASSINATE'}
+                ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}
                 onClick={isOnline && online.myIndex === 1 ? handleOnlineUlt : null}
                 disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
                 tip={ultTip(state.p2)}
@@ -1847,7 +2206,7 @@ export default function GameBoard() {
       </div>
 
       {state.log.length > 0 && (
-        <div style={{ maxHeight: 120, overflowY: 'auto', fontSize: 12, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, marginBottom: 8 }}>
           {[...state.log].reverse().map(entry => (
             <LogRow key={entry.turn} entry={entry} p1Name={p1Name} p2Name={p2Name} p1Char={state.p1Character} p2Char={state.p2Character} />
           ))}
@@ -1874,15 +2233,36 @@ export default function GameBoard() {
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
         {isOnline ? (
           <>
-            <button onClick={handleOnlineRematch} disabled={!gameOver || animating || ultAnimating || collapseAnimating || betweenTurns}>Rematch</button>
-            <button onClick={handleOnlineLeave} style={{ fontSize: 10, color: '#aaa' }}>Leave</button>
+            <button onClick={() => { playMenuClick(); handleOnlineRematch() }} disabled={!gameOver || animating || ultAnimating || collapseAnimating || betweenTurns}>Rematch</button>
+            <button onClick={() => { playMenuClick(); handleOnlineLeave() }} style={{ fontSize: 10, color: '#aaa' }}>Leave</button>
           </>
         ) : (
           <>
-            <button onClick={handleReset} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns}>Reset</button>
-            <button onClick={handleChangeChars} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
+            <button onClick={() => { playMenuClick(); handleReset() }} disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns}>Reset</button>
+            <button onClick={() => { playMenuClick(); handleChangeChars() }} style={{ fontSize: 10, color: '#aaa' }}>Change</button>
           </>
         )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+        <span style={{ fontSize: 11, color: '#666', letterSpacing: 1 }}>♪</span>
+        <input
+          type="range" min="0" max="1" step="0.01"
+          value={bgmVolume}
+          onChange={e => setBgmVolume(parseFloat(e.target.value))}
+          style={{ width: 100, accentColor: '#5af', cursor: 'pointer' }}
+        />
+        <span style={{ fontSize: 11, color: '#555', width: 28 }}>{Math.round(bgmVolume * 100)}%</span>
+      </div>
+      <div style={{ marginTop: 10, fontSize: 10, color: '#555', fontFamily: 'monospace' }}>
+        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={cpuAlwaysBlock}
+            onChange={e => setCpuAlwaysBlock(e.target.checked)}
+            style={{ accentColor: '#f80' }}
+          />
+          <span style={{ color: cpuAlwaysBlock ? '#f80' : '#555' }}>DEV: CPU always block</span>
+        </label>
       </div>
     </div>
     </>

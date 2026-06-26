@@ -36,7 +36,7 @@ for (const affinity of affinities) {
         hp:       Math.ceil(HP_BY_WEIGHT[weight] * HP_BY_CLASS[cls] / 5) * 5,
         atDamage:   AT_BASE[cls] + WEIGHT_MOD[weight],
         spDamage:   SP_BASE[cls] + WEIGHT_MOD[weight],
-        critChance: CRIT_BY_WEIGHT[weight],
+        critChance: isCairan ? 0.15 : CRIT_BY_WEIGHT[weight],
       })
     }
   }

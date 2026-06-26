@@ -742,6 +742,17 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       finalP1Damage = 0
     }
   }
+  // ── Wrack: SP vs SP tie → flat 4-stack poison instead of direct damage ───
+  if (turnResult.outcome === 'TIE' && p1Move === 'SP') {
+    if (newP1.hasWrack && finalP2Damage > 0) {
+      newP1._wrackSpPoison = (newP1._wrackSpPoison ?? 0) + 4
+      finalP2Damage = 0
+    }
+    if (newP2.hasWrack && finalP1Damage > 0) {
+      newP2._wrackSpPoison = (newP2._wrackSpPoison ?? 0) + 4
+      finalP1Damage = 0
+    }
+  }
 
   // ── Dodge override ────────────────────────────────────────────────────────
   let dodgeP1 = {}
@@ -1080,6 +1091,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
 
   const p1VaelEvadeUnlocked = (newP1.vaelEvadeUnlocked ?? false) || (newP1.hasVael && p1VaelToggledGoodReads >= 2)
   const p2VaelEvadeUnlocked = (newP2.vaelEvadeUnlocked ?? false) || (newP2.hasVael && p2VaelToggledGoodReads >= 2)
+  const p1VaelEvadeJustUnlocked = !newP1.vaelEvadeUnlocked && p1VaelEvadeUnlocked
+  const p2VaelEvadeJustUnlocked = !newP2.vaelEvadeUnlocked && p2VaelEvadeUnlocked
 
   const p1RegenUnlocked = (newP1.vaelRegenUnlocked ?? false) || (newP1.hasVael && p1VaelNormalGoodReads >= 3)
   const p2RegenUnlocked = (newP2.vaelRegenUnlocked ?? false) || (newP2.hasVael && p2VaelNormalGoodReads >= 3)
@@ -1094,6 +1107,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   //   Once unlocked, each further cycle completion poisons for Wrack's base AT damage.
   // GALL (read): unlocks after 3 toggled Good Reads with AT or SP.
   //   Once unlocked, each further AT/SP toggled Good Read adds +3 poison on top.
+  const p1WrackNewUnlocks = []
+  const p2WrackNewUnlocks = []
   for (const [pk, oppKey, move, read, chainLen, cycleJustCompleted, readActive] of [
     ['p1', 'p2', p1Move, p1Read, Math.max(newP1.atChain, newP1.spChain), newP1.cycleSet?.length === 0 && (gameState.p1.cycleSet?.length ?? 0) > 0, p1ReadActive],
     ['p2', 'p1', p2Move, p2Read, Math.max(newP2.atChain, newP2.spChain), newP2.cycleSet?.length === 0 && (gameState.p2.cycleSet?.length ?? 0) > 0, p2ReadActive],
@@ -1135,12 +1150,34 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       if (pk === 'p1') p2Poison += 3
       else             p1Poison += 3
     }
+    // Detect just-unlocked passives (player still holds pre-assign values here)
+    const wrackNewUnlocks = pk === 'p1' ? p1WrackNewUnlocks : p2WrackNewUnlocks
+    if (!player.festeringUnlocked && festeringUnlocked) wrackNewUnlocks.push('fester')
+    if (!player.witherUnlocked    && witherUnlocked)    wrackNewUnlocks.push('wither')
+    if (!player.gallUnlocked      && gallUnlocked)      wrackNewUnlocks.push('gall')
     // Write updates back to the player object
     if (pk === 'p1') {
       Object.assign(newP1, { wrackChainTriggers, wrackCycleTriggers, wrackReadTriggers, festeringUnlocked, witherUnlocked, gallUnlocked })
     } else {
       Object.assign(newP2, { wrackChainTriggers, wrackCycleTriggers, wrackReadTriggers, festeringUnlocked, witherUnlocked, gallUnlocked })
     }
+  }
+
+  // ── Flow State activation: cleanse all negative status effects ────────────
+  // Entering Flow State (transitioning from false to true this turn) wipes
+  // poison, all bleeds, and any active move disable from the player.
+  // Does not fire on turns where Flow State was already active coming in.
+  const p1FlowJustActivated = !p1FlowNow && newP1.flowState
+  const p2FlowJustActivated = !p2FlowNow && newP2.flowState
+  if (p1FlowJustActivated) {
+    newP1.poison      = 0
+    newP1.bleeds      = []
+    newP1.disabledMove = null
+  }
+  if (p2FlowJustActivated) {
+    newP2.poison      = 0
+    newP2.bleeds      = []
+    newP2.disabledMove = null
   }
 
   // ── Log entry ─────────────────────────────────────────────────────────────
@@ -1172,6 +1209,8 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2FlowActivated: !p2FlowNow    && newP2.flowState,
     p1FlowBroken:     p1FlowNow    && !newP1.flowState,
     p2FlowBroken:     p2FlowNow    && !newP2.flowState,
+    p1FlowCleansed:  p1FlowJustActivated,
+    p2FlowCleansed:  p2FlowJustActivated,
     p1ZenActive:      newP1.zenState,
     p2ZenActive:      newP2.zenState,
     p1ZenActivated:  !p1ZenNow     && newP1.zenState,
@@ -1188,8 +1227,20 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2NimbleTriggered,
     p1VaelEvaded,
     p2VaelEvaded,
-    p1NewUnlocks: [...p1CairanUnlocks, ...p1MourneUnlocks],
-    p2NewUnlocks: [...p2CairanUnlocks, ...p2MourneUnlocks],
+    p1NewUnlocks: [
+      ...p1CairanUnlocks, ...p1MourneUnlocks,
+      ...(p1JinxJustUnlocked      ? ['vaelJinx']  : []),
+      ...(p1RegenJustUnlocked     ? ['vaelRegen']  : []),
+      ...(p1VaelEvadeJustUnlocked ? ['vaelEvade']  : []),
+      ...p1WrackNewUnlocks,
+    ],
+    p2NewUnlocks: [
+      ...p2CairanUnlocks, ...p2MourneUnlocks,
+      ...(p2JinxJustUnlocked      ? ['vaelJinx']  : []),
+      ...(p2RegenJustUnlocked     ? ['vaelRegen']  : []),
+      ...(p2VaelEvadeJustUnlocked ? ['vaelEvade']  : []),
+      ...p2WrackNewUnlocks,
+    ],
     p1MourneData,
     p2MourneData,
     isBLTie,

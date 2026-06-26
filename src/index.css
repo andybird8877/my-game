@@ -196,6 +196,10 @@
   0%, 100% { box-shadow: 0 0 6px 2px #c09000, 0 0 16px 5px rgba(192,144,0,0.45); border-color: #c09000; }
   50%       { box-shadow: 0 0 14px 5px #ffd040, 0 0 32px 10px rgba(255,208,64,0.55); border-color: #ffd040; }
 }
+@keyframes litGreenPulse {
+  0%, 100% { box-shadow: 0 0 6px 2px #4a9900, 0 0 16px 5px rgba(74,153,0,0.45); border-color: #4a9900; }
+  50%       { box-shadow: 0 0 14px 5px #88ee22, 0 0 32px 10px rgba(136,238,34,0.55); border-color: #88ee22; }
+}
 
 .lit-crimson {
   border: 1px solid #c02030 !important;
@@ -211,6 +215,11 @@
   border: 1px solid #c09000 !important;
   color: #ffd050 !important;
   animation: litGoldPulse 1.3s ease-in-out infinite;
+}
+.lit-green {
+  border: 1px solid #4a9900 !important;
+  color: #88ee22 !important;
+  animation: litGreenPulse 1.3s ease-in-out infinite;
 }
 
 @keyframes flowGlow {
@@ -478,7 +487,8 @@ body::before {
   /* Keep lit-class glows working on mobile */
   .move-btn-row .lit-crimson,
   .move-btn-row .lit-violet,
-  .move-btn-row .lit-gold {
+  .move-btn-row .lit-gold,
+  .move-btn-row .lit-green {
     flex: 1 1 auto !important;
   }
 }
