@@ -239,6 +239,49 @@
   border-style: solid !important;
 }
 
+@keyframes zenGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px 3px #4f8, 0 0 20px 6px #4f84, inset 0 0 8px 2px #4f82;
+    border-color: #4f8;
+  }
+  50% {
+    box-shadow: 0 0 16px 6px #4cf, 0 0 36px 12px #4cf8, inset 0 0 14px 4px #4cf4;
+    border-color: #4cf;
+  }
+}
+
+.zen-portrait {
+  animation: zenGlow 0.75s ease-in-out infinite;
+  border: 2px solid #4f8 !important;
+  border-style: solid !important;
+}
+
+@keyframes godGlow {
+  0%, 100% {
+    box-shadow: 0 0 12px 5px #fff, 0 0 28px 10px #fff6, inset 0 0 10px 3px #fff4;
+    border-color: #fff;
+  }
+  50% {
+    box-shadow: 0 0 22px 8px #ffe, 0 0 48px 16px #ffe8, inset 0 0 18px 6px #ffe4;
+    border-color: #ffe;
+  }
+}
+
+.godmode-portrait {
+  animation: godGlow 0.75s ease-in-out infinite;
+  border: 2px solid #fff !important;
+  border-style: solid !important;
+}
+
+@keyframes godBtnGlow {
+  0%, 100% { box-shadow: 0 0 8px 3px #fff8, 0 0 18px 6px #fff4; }
+  50%       { box-shadow: 0 0 16px 6px #ffec, 0 0 32px 10px #ffe6; }
+}
+
+.godmode-btn {
+  animation: godBtnGlow 0.75s ease-in-out infinite;
+}
+
 @keyframes effectAppear {
   0%   { opacity: 0; transform: translateY(-6px); }
   12%  { opacity: 1; transform: translateY(0);    }
@@ -403,11 +446,19 @@ body::before {
   }
 
   .panel {
-    width: 50% !important;
-    max-width: 50% !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
     padding: 0 3px !important;
+  }
+
+  .panel-p1 {
+    width: 62.5% !important;
+    max-width: 62.5% !important;
+  }
+
+  .panel-p2 {
+    width: 37.5% !important;
+    max-width: 37.5% !important;
   }
 
   /* Compact stats line above portrait */

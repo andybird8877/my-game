@@ -190,10 +190,11 @@ function updateFlowState(player, myRead, opponentRead) {
   }
   if (myRead === 'good') {
     const newCount = player.consecutiveGoodReads + 1
+    const newFlowState = player.flowState || newCount >= 2
     return {
-      flowState:    player.flowState    || newCount >= 2,
-      zenState:     player.zenState     || newCount >= 3,
-      godModeState: player.godModeState || newCount >= 4,
+      flowState:    newFlowState,
+      zenState:     player.zenState || (player.flowState) || newCount >= 3,
+      godModeState: player.godModeState || (player.zenState),
       consecutiveGoodReads: newCount,
     }
   }
@@ -654,10 +655,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const newP2 = { ...updateChains(gameState.p2, p2Move, p2ReadActive), ...updateCycle(gameState.p2, p2Move, p2ReadActive), ...p2FlowUpdate }
 
   // ── Ultimate unlock: three sticky conditions (all must be achieved) ────────
-  const p1UltGoodReads     = Math.min(2, (newP1.ultGoodReads ?? 0) + (p1ReadActive && p1Read === 'good' ? 1 : 0))
-  const p2UltGoodReads     = Math.min(2, (newP2.ultGoodReads ?? 0) + (p2ReadActive && p2Read === 'good' ? 1 : 0))
-  const p1UltReadAchieved  = p1UltGoodReads >= 2
-  const p2UltReadAchieved  = p2UltGoodReads >= 2
+  const p1UltGoodReads     = Math.min(3, (newP1.ultGoodReads ?? 0) + (p1ReadActive && p1Read === 'good' ? 1 : 0))
+  const p2UltGoodReads     = Math.min(3, (newP2.ultGoodReads ?? 0) + (p2ReadActive && p2Read === 'good' ? 1 : 0))
+  const p1UltReadAchieved  = p1UltGoodReads >= 3
+  const p2UltReadAchieved  = p2UltGoodReads >= 3
   const p1UltChainAchieved = (newP1.ultChainAchieved ?? false) || newP1.atChain >= 3 || newP1.spChain >= 3
   const p2UltChainAchieved = (newP2.ultChainAchieved ?? false) || newP2.atChain >= 3 || newP2.spChain >= 3
   const p1AllLit = !!(newP1.cycleLit?.AT && newP1.cycleLit?.BL && newP1.cycleLit?.SP)

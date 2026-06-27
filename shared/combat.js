@@ -190,10 +190,11 @@ function updateFlowState(player, myRead, opponentRead) {
   }
   if (myRead === 'good') {
     const newCount = player.consecutiveGoodReads + 1
+    const newFlowState = player.flowState || newCount >= 2
     return {
-      flowState:    player.flowState    || newCount >= 2,
-      zenState:     player.zenState     || newCount >= 3,
-      godModeState: player.godModeState || newCount >= 4,
+      flowState:    newFlowState,
+      zenState:     player.zenState || (player.flowState) || newCount >= 3,
+      godModeState: player.godModeState || (player.zenState),
       consecutiveGoodReads: newCount,
     }
   }
@@ -381,24 +382,25 @@ function processWrackUlt(gameState, ultUser) {
   const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
-  const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
-  const newDefenderHp = Math.max(0, defender.hp - actualDamage)
+  const { raw: rawHeal, actual: actualHeal } = calcUltDamage(attacker)
+  const newAttackerHp = Math.min(attacker.maxHp ?? 300, attacker.hp + actualHeal)
   const entry = {
     turn: gameState.log.length + 1,
     isUlt: true,
     isWrackUlt: true,
     ultUser,
-    rawDamage,
-    actualDamage,
-    healAmount: 0,
+    rawDamage: 0,
+    actualDamage: 0,
+    healAmount: actualHeal,
     wrackPoisonDealt: attacker.wrackPoisonDealt ?? 0,
-    p1Hp: ultUser === 'p1' ? attacker.hp : newDefenderHp,
-    p2Hp: ultUser === 'p2' ? attacker.hp : newDefenderHp,
+    p1Hp: ultUser === 'p1' ? newAttackerHp : attacker.hp,
+    p2Hp: ultUser === 'p2' ? newAttackerHp : defender.hp,
   }
   return {
     ...gameState,
     [ultUser]: {
       ...attacker,
+      hp: newAttackerHp,
       ultimateReady: false,
       cycleLit: {},
       cycleSet: [],
@@ -407,7 +409,7 @@ function processWrackUlt(gameState, ultUser) {
       ultGoodReads: 0,
       ultChainAchieved: false,
     },
-    [defenderKey]: { ...defender, hp: newDefenderHp },
+    [defenderKey]: { ...defender },
     lastTurn: entry,
     log: [...gameState.log, entry],
   }
@@ -654,10 +656,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const newP2 = { ...updateChains(gameState.p2, p2Move, p2ReadActive), ...updateCycle(gameState.p2, p2Move, p2ReadActive), ...p2FlowUpdate }
 
   // ── Ultimate unlock: three sticky conditions (all must be achieved) ────────
-  const p1UltGoodReads     = Math.min(2, (newP1.ultGoodReads ?? 0) + (p1ReadActive && p1Read === 'good' ? 1 : 0))
-  const p2UltGoodReads     = Math.min(2, (newP2.ultGoodReads ?? 0) + (p2ReadActive && p2Read === 'good' ? 1 : 0))
-  const p1UltReadAchieved  = p1UltGoodReads >= 2
-  const p2UltReadAchieved  = p2UltGoodReads >= 2
+  const p1UltGoodReads     = Math.min(3, (newP1.ultGoodReads ?? 0) + (p1ReadActive && p1Read === 'good' ? 1 : 0))
+  const p2UltGoodReads     = Math.min(3, (newP2.ultGoodReads ?? 0) + (p2ReadActive && p2Read === 'good' ? 1 : 0))
+  const p1UltReadAchieved  = p1UltGoodReads >= 3
+  const p2UltReadAchieved  = p2UltGoodReads >= 3
   const p1UltChainAchieved = (newP1.ultChainAchieved ?? false) || newP1.atChain >= 3 || newP1.spChain >= 3
   const p2UltChainAchieved = (newP2.ultChainAchieved ?? false) || newP2.atChain >= 3 || newP2.spChain >= 3
   const p1AllLit = !!(newP1.cycleLit?.AT && newP1.cycleLit?.BL && newP1.cycleLit?.SP)

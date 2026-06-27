@@ -110,7 +110,7 @@ const TUTORIAL_CARDS = [
   },
   {
     title: 'THE THREE MOVES',
-    body: 'Every fighter has three moves: AT — Attack. Beats SP. BL — Block. Beats AT. SP — Special. Beats BL. It\'s a triangle. But it\'s not that simple.',
+    body: 'Every fighter has three moves: AT (Attack), BL (Block), and SP (Special).\n\nAT beats SP.\nBL beats AT.\nSP beats BL.\n\nIt\'s a triangle. But it\'s not that simple.',
     images: ['/card-2.png'],
   },
   {
@@ -192,7 +192,7 @@ function TutorialScreen({ onDone }) {
         )}
 
         {/* Body */}
-        <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.8 }}>
+        <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.8, whiteSpace: 'pre-line' }}>
           {card.body}
         </div>
       </div>
@@ -582,18 +582,18 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit, ult
   const timer = useRef(null)
   const r = 34, cx = 44, cy = 44
   const circumference = 2 * Math.PI * r
-  const NUM_SEG = 6
+  const NUM_SEG = 7
   const gap     = 5
   const slotLen = circumference / NUM_SEG
   const segLen  = slotLen - gap
 
-  const goodReadsCount = Math.min(2, ultGoodReads ?? 0)
+  const goodReadsCount = Math.min(3, ultGoodReads ?? 0)
   const chainCount     = ultChainAchieved ? 1 : 0
   const litCount       = ['AT', 'BL', 'SP'].filter(m => cycleLit?.[m]).length
-  const segmentsMet    = goodReadsCount + chainCount + litCount  // 0–6
+  const segmentsMet    = goodReadsCount + chainCount + litCount  // 0–7
 
   const conditions = [
-    { label: `Good Reads ${goodReadsCount}/2`, done: goodReadsCount >= 2, detail: 'Toggle Read on and win the clash twice. Does not need to be consecutive.' },
+    { label: `Good Reads ${goodReadsCount}/3`, done: goodReadsCount >= 3, detail: 'Toggle Read on and win the clash three times. Does not need to be consecutive.' },
     { label: 'Power Chain',                    done: !!ultChainAchieved,  detail: 'Play AT or SP three times in a row with Read off.' },
     { label: `Cycle Lit ${litCount}/3`,        done: litCount >= 3,       detail: 'Play each of AT, BL, and SP with Read off to light them. You do not need to win the clash.' },
   ]
@@ -656,7 +656,7 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit, ult
         {ready
           ? <text x={cx} y={cy + 7} textAnchor="middle" fontSize={20} fill={accent} fontWeight="bold"
               style={{ animation: 'ultPulse 1.1s ease-in-out infinite' }}>✓</text>
-          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={13} fill={segmentsMet > 0 ? '#aaa' : '#444'}>{segmentsMet}/6</text>
+          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={13} fill={segmentsMet > 0 ? '#aaa' : '#444'}>{segmentsMet}/7</text>
         }
       </svg>
       <div style={{
@@ -875,9 +875,13 @@ export default function GameBoard() {
     if (state && wasNull) {
       const t1 = setTimeout(() => {
         setFightBanner(true)
-        playSound('/audio/VO/fight VO.wav', 1)
+        if (bgmRef.current) bgmRef.current.volume = Math.min(bgmVolume * 0.25, bgmRef.current.volume)
+        playSound('/audio/VO/fight VO.wav?v=2', 1)
       }, 500)
-      const t2 = setTimeout(() => setFightBanner(false), 3000)
+      const t2 = setTimeout(() => {
+        setFightBanner(false)
+        if (bgmRef.current) bgmRef.current.volume = bgmVolume
+      }, 3000)
       return () => { clearTimeout(t1); clearTimeout(t2) }
     }
   }, [state])
@@ -1463,7 +1467,8 @@ export default function GameBoard() {
 
   function handleUlt() {
     if (animating || ultAnimating || collapseAnimating) return
-    playSound(sfxRand(SFX.em), 0.9)
+    const isCairanUlt = state.p1Character?.name === 'Cairan Vex' || state.p2Character?.name === 'Cairan Vex'
+    if (!isCairanUlt) playSound(sfxRand(SFX.em), 0.9)
     const ultState = processUlt(state, 'p1')
 
     if (state.p1.hasMourne) {
@@ -1495,6 +1500,7 @@ export default function GameBoard() {
 
     setDisplayedState(state)
     setUltAnimating(true)
+    if (isCairanUlt) playSound('/audio/ults/cairan-vex-ult.m4a', 1)
     setTimeout(() => {
       setState(ultState)
       setDisplayedState(null)
@@ -1641,9 +1647,9 @@ export default function GameBoard() {
     if (player.hasWrack) {
       const poisonDealt = player.wrackPoisonDealt ?? 0
       return {
-        name: 'OUTBREAK',
-        description: 'Wrack unleashes all accumulated rot — total poison damage dealt this match fires as a single direct hit.',
-        stat: `Total poison dealt: ${poisonDealt} dmg`,
+        name: 'HARVEST',
+        description: 'Wrack draws on the rot he has spread — healing himself for all the poison damage dealt this match.',
+        stat: `Total poison dealt: ${poisonDealt} hp`,
       }
     }
     // Default: Cairan / ASSASSINATE
@@ -1700,9 +1706,9 @@ export default function GameBoard() {
       `}</style>
     )}
     {ultAnimating && <div className="ult-screen-overlay" />}
-    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : myPlayer.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}</div>}
+    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : myPlayer.hasWrack ? 'HARVEST' : 'ASSASSINATE'}</div>}
     {p2UltAnimating && <div className="ult-screen-overlay" />}
-    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}</div>}
+    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'HARVEST' : 'ASSASSINATE'}</div>}
     {collapseAnimating && <div className="collapse-overlay" />}
     {collapseAnimating && <div className="collapse-title">COLLAPSE</div>}
     {collapseAnimating && collapseData && (
@@ -1745,7 +1751,7 @@ export default function GameBoard() {
             <img
               src={state.p1Character?.portrait ?? '/src/img/tyrone.png'}
               alt="P1"
-              className={['portrait-img', state.p1.flowState ? 'flow-portrait' : undefined].filter(Boolean).join(' ')}
+              className={['portrait-img', state.p1.godModeState ? 'godmode-portrait' : state.p1.zenState ? 'zen-portrait' : state.p1.flowState ? 'flow-portrait' : undefined].filter(Boolean).join(' ')}
               style={{ width: 280, height: 280, objectFit: 'cover', border: '2px solid #555', display: 'block', transition: 'transform 0.9s ease, filter 0.9s ease', transform: deathEffectsReady && loser === 'p1' ? 'rotate(180deg)' : undefined, filter: deathEffectsReady && loser === 'p1' ? 'grayscale(1)' : undefined }}
             />
             {animating && lastMoves.p1 && (
@@ -1783,7 +1789,13 @@ export default function GameBoard() {
             )}
           </div>
           <HpBar hp={dispP1Hp} maxHp={state.p1.maxHp} />
-          {!isMobile && state.p1.flowState && (
+          {!isMobile && state.p1.godModeState && (
+            <div style={{ fontSize: 9, color: '#ffe', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>GOD MODE</div>
+          )}
+          {!isMobile && !state.p1.godModeState && state.p1.zenState && (
+            <div style={{ fontSize: 9, color: '#4f8', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>ZEN</div>
+          )}
+          {!isMobile && !state.p1.godModeState && !state.p1.zenState && state.p1.flowState && (
             <div style={{ fontSize: 9, color: '#f80', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>FLOW</div>
           )}
           {!isMobile && state.p1.overloadActive && (
@@ -1803,6 +1815,7 @@ export default function GameBoard() {
                   <div style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <div
                       onClick={isP1Controllable && !moveDisabled ? () => isOnline ? handleOnlineMove(move) : handleMove(move) : undefined}
+                      className={state.p1.godModeState ? 'godmode-btn' : undefined}
                       style={{
                         width: '100%', aspectRatio: '1', borderRadius: '50%',
                         backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : state.p1.hasWrack ? '#88ee22' : p1Accent) : '#333',
@@ -1842,27 +1855,27 @@ export default function GameBoard() {
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}
                 style={{
                   position: 'relative', marginTop: 6,
-                  width: 260, height: 36, borderRadius: 18,
+                  width: isMobile ? '100%' : 260, height: 36, borderRadius: 18,
                   background: '#111', border: '2px solid #555',
                   display: 'flex', alignItems: 'center',
                   opacity: readDisabled ? 0.45 : 1,
                   cursor: readDisabled ? 'not-allowed' : 'pointer',
-                  userSelect: 'none', flexShrink: 0,
+                  userSelect: 'none', flexShrink: 0, boxSizing: 'border-box',
                 }}
               >
                 {/* ON label */}
-                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
+                <div style={{ flex: 1, textAlign: 'center', fontSize: isMobile ? 10 : 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
                 {/* OFF label */}
-                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
+                <div style={{ flex: 1, textAlign: 'center', fontSize: isMobile ? 10 : 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
                 {/* sliding cover */}
                 <div style={{
                   position: 'absolute', top: 2, left: 4,
-                  width: 124, height: 28, borderRadius: 14,
+                  width: 'calc(50% - 6px)', height: 28, borderRadius: 14,
                   background: '#888',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
+                  fontSize: isMobile ? 10 : 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
                   boxShadow: '0 0 6px rgba(255,255,255,0.15)',
-                  transform: p1ReadActive ? 'translateX(124px)' : 'translateX(0)',
+                  transform: p1ReadActive ? 'translateX(calc(100% + 4px))' : 'translateX(0)',
                   transition: 'transform 0.22s ease',
                   pointerEvents: 'none',
                 }}>READ</div>
@@ -1959,7 +1972,7 @@ export default function GameBoard() {
                 ultGoodReads={state.p1.ultGoodReads ?? 0}
                 ultChainAchieved={!!state.p1.ultChainAchieved}
                 cycleLit={state.p1.cycleLit}
-                ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : state.p1.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}
+                ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : state.p1.hasWrack ? 'HARVEST' : 'ASSASSINATE'}
                 onClick={!isOnline ? handleUlt : (online.myIndex === 0 ? handleOnlineUlt : null)}
                 disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
                 tip={ultTip(state.p1)}
@@ -1982,7 +1995,13 @@ export default function GameBoard() {
               <span style={{ color: '#aaa' }}>HP:{dispP2Hp} AT:{Math.max(state.p2.atDmgBuff, state.p2.baseAtDamage)} SP:{state.p2.hasMourne && state.p2.overloadActive ? Math.floor(Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage) * 1.75) : Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage)}</span>
             </div>
           )}
-          {!isMobile && state.p2.flowState && (
+          {!isMobile && state.p2.godModeState && (
+            <div style={{ fontSize: 9, color: '#ffe', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>GOD MODE</div>
+          )}
+          {!isMobile && !state.p2.godModeState && state.p2.zenState && (
+            <div style={{ fontSize: 9, color: '#4f8', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>ZEN</div>
+          )}
+          {!isMobile && !state.p2.godModeState && !state.p2.zenState && state.p2.flowState && (
             <div style={{ fontSize: 9, color: '#f80', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>FLOW</div>
           )}
           {!isMobile && state.p2.overloadActive && (
@@ -1994,7 +2013,7 @@ export default function GameBoard() {
             <img
               src={state.p2Character?.portrait ?? '/src/img/stotch.png'}
               alt="P2"
-              className={['portrait-img', state.p2.flowState ? 'flow-portrait' : undefined].filter(Boolean).join(' ')}
+              className={['portrait-img', state.p2.godModeState ? 'godmode-portrait' : state.p2.zenState ? 'zen-portrait' : state.p2.flowState ? 'flow-portrait' : undefined].filter(Boolean).join(' ')}
               style={{ width: 280, height: 280, objectFit: 'cover', border: '2px solid #555', display: 'block', transition: 'transform 0.9s ease, filter 0.9s ease', transform: deathEffectsReady && loser === 'p2' ? 'scaleX(-1) rotate(180deg)' : 'scaleX(-1)', filter: deathEffectsReady && loser === 'p2' ? 'grayscale(1)' : undefined }}
             />
             {animating && lastMoves.p2 && (
@@ -2076,21 +2095,21 @@ export default function GameBoard() {
             return (
               <div style={{
                 position: 'relative', marginTop: 6, marginLeft: 'auto',
-                width: 260, height: 36, borderRadius: 18,
+                width: isMobile ? '100%' : 260, height: 36, borderRadius: 18,
                 background: '#111', border: '2px solid #555',
                 display: 'flex', alignItems: 'center',
-                userSelect: 'none', flexShrink: 0,
+                userSelect: 'none', flexShrink: 0, boxSizing: 'border-box',
               }}>
-                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
-                <div style={{ flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
+                <div style={{ flex: 1, textAlign: 'center', fontSize: isMobile ? 10 : 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
+                <div style={{ flex: 1, textAlign: 'center', fontSize: isMobile ? 10 : 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
                 <div style={{
                   position: 'absolute', top: 2, left: 4,
-                  width: 124, height: 28, borderRadius: 14,
+                  width: 'calc(50% - 6px)', height: 28, borderRadius: 14,
                   background: '#888',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
+                  fontSize: isMobile ? 10 : 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
                   boxShadow: '0 0 6px rgba(255,255,255,0.15)',
-                  transform: p2ReadOn ? 'translateX(124px)' : 'translateX(0)',
+                  transform: p2ReadOn ? 'translateX(calc(100% + 4px))' : 'translateX(0)',
                   transition: 'transform 0.22s ease',
                   pointerEvents: 'none',
                 }}>READ</div>
@@ -2188,7 +2207,7 @@ export default function GameBoard() {
                 ultGoodReads={state.p2.ultGoodReads ?? 0}
                 ultChainAchieved={!!state.p2.ultChainAchieved}
                 cycleLit={state.p2.cycleLit}
-                ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'OUTBREAK' : 'ASSASSINATE'}
+                ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'HARVEST' : 'ASSASSINATE'}
                 onClick={isOnline && online.myIndex === 1 ? handleOnlineUlt : null}
                 disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
                 tip={ultTip(state.p2)}
@@ -2306,6 +2325,13 @@ export default function GameBoard() {
               />
               <span style={{ color: cpuAlwaysBlock ? '#f80' : '#555' }}>CPU always block</span>
             </label>
+            <button
+              onClick={handleUlt}
+              disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || gameOver}
+              style={{ fontSize: 10, color: '#f80', background: 'none', border: '1px solid #f80', padding: '4px 8px', cursor: 'pointer', fontFamily: 'monospace', letterSpacing: 1, opacity: (animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || gameOver) ? 0.35 : 1 }}
+            >
+              TRIGGER ULT
+            </button>
           </div>
         )}
       </div>
