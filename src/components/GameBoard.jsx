@@ -25,8 +25,14 @@ const TIPS = {
   vaelRegen:     { name: 'Regen',       description: 'After each turn resolves, Vael heals a portion of her max HP. Heal amount scales inversely with current HP — strongest when low, minimal when near full.',                               unlock: 'Land 3 Good Clashes (without Read active).' },
   vaelEvade:     { name: 'Evade',       description: 'Unlocks after 2 committed Read-toggle wins. Once unlocked, evade chance scales with remaining HP, from 5% at full health up to 25% near death.',                                        unlock: 'Land 2 Good Reads (with Read active).' },
   wrackFestering: { name: 'FESTER',  description: 'Once unlocked, any hit from a chain of 4+ also applies poison equal to the current chain length.',  unlock: 'Reach an AT or SP chain of 4+ on 4 separate turns.' },
-  wrackWither:    { name: 'WITHER',     description: 'Once unlocked, each time Wrack completes a combat cycle, poison equal to his base AT damage is applied.',                                                                               unlock: 'Complete the combat cycle 4 times.' },
+  wrackWither:    { name: 'WITHER',     description: 'Once unlocked, each successful toggled Good Read applies poison equal to Wrack\'s base AT damage.',                                                                                    unlock: 'Land 4 toggled Good Reads.' },
   wrackGall:      { name: 'GALL',       description: 'Once unlocked, each toggled Good Read with AT or SP applies +3 bonus poison on top.',                                                                                                   unlock: 'Land 4 toggled Good Reads with AT or SP.' },
+  harroxIronSkin: { name: 'IRON SKIN',  description: 'Permanently adds +3 to Harrox\'s base AT damage.',                                                                                                                                      unlock: 'Take direct damage 6 times.' },
+  harroxFrenzy:   { name: 'FRENZY',     description: 'Crit chance increases to 8%. AT chain can never reset below 1 — every turn Harrox carries at least one chain stack.',                                                                   unlock: 'Take direct damage 12 times.' },
+  harroxMassacre:    { name: 'MASSACRE',    description: 'Every AT win inflicts a Bleed stack on the opponent, even without a Read toggled. Also adds 3 Bleeds when RAMPAGE fires.',                                                             unlock: 'Take direct damage 18 times.' },
+  sableResonance:    { name: 'RESONANCE',   description: 'Sable begins absorbing incoming damage as Echo charge at 25% rate. Stored charge fires as bonus damage whenever she wins with SP.',                                                   unlock: 'Take direct damage 3 times.' },
+  sableRefraction:   { name: 'REFRACTION',  description: 'Echo absorption rate increases to 40%. If the SP win that fires the Echo was a toggled Good Read, the burst deals 1.5× damage.',                                                     unlock: 'Fire 2 SP Echo bursts.' },
+  sableNullfield:    { name: 'NULLFIELD',   description: 'Once per match, when Sable would take lethal damage, that damage is reflected at the attacker instead and Sable survives. Does not block DoT.',                                  unlock: 'Achieve 3 Good Reads.' },
 }
 
 // ─── Sound ───────────────────────────────────────────────────────────────────
@@ -48,6 +54,7 @@ function playSound(src, volume = 1) {
 function playMenuClick() { playSound('/audio/menu-click.m4a', 0.7) }
 
 // ─── Tooltip UI ───────────────────────────────────────────────────────────────
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
 
 function TooltipBox({ name, description, stat, unlock, unlocked, x, y }) {
   const W = 224
@@ -85,9 +92,9 @@ function TooltipWrap({ tip, unlocked = true, children }) {
   return (
     <div
       style={{ display: 'contents' }}
-      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
-      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
     >
       {children}
       {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
@@ -399,7 +406,7 @@ function CharacterSelect({ step, p1Char, onSelect, onPreview }) {
       {good.length > 0 && (
         <>
           <div style={{ marginBottom: 8, color: '#5af', fontSize: 10, letterSpacing: 2 }}>GOOD</div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${good.length}, 1fr)`, gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
             {good.map(renderCard)}
           </div>
         </>
@@ -408,7 +415,7 @@ function CharacterSelect({ step, p1Char, onSelect, onPreview }) {
       {evil.length > 0 && (
         <>
           <div style={{ marginBottom: 8, color: '#f55', fontSize: 10, letterSpacing: 2 }}>EVIL</div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${evil.length}, 1fr)`, gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
             {evil.map(renderCard)}
           </div>
         </>
@@ -432,9 +439,9 @@ function AbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
   return (
     <div
       style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
-      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
-      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
     >
       <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
@@ -469,9 +476,9 @@ function MourneAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
   return (
     <div
       style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
-      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
-      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
     >
       <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
@@ -508,9 +515,9 @@ function VaelAbilityWheel({ count, unlocked, label, maxCount, tip }) {
   return (
     <div
       style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
-      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
-      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
     >
       <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
@@ -547,9 +554,9 @@ function WrackAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
   return (
     <div
       style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
-      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
-      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
     >
       <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
@@ -566,6 +573,111 @@ function WrackAbilityWheel({ count, unlocked, label, maxCount = 3, tip }) {
           ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold">✓</text>
           : <text x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fill="#555">{count}/{maxCount}</text>
         }
+      </svg>
+      <div style={{ fontSize: 9, color: unlocked ? accent : '#666', letterSpacing: 0.5, textAlign: 'center', marginTop: 3 }}>{label}</div>
+      {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
+    </div>
+  )
+}
+
+// Harrox ability wheel — amber/orange accent, tracks FURY toward each threshold
+function HarroxAbilityWheel({ count, unlocked, label, maxCount, tip }) {
+  const [show, setShow] = useState(false)
+  const [pos,  setPos]  = useState({ x: 0, y: 0 })
+  const timer = useRef(null)
+  const r = 34, cx = 40, cy = 40
+  const circumference = 2 * Math.PI * r
+  const filled  = unlocked ? maxCount : Math.min(count, maxCount)
+  const dashLen = filled > 0 ? (circumference / maxCount) * filled : 0
+  const accent  = '#ff8800'
+  const stroke  = unlocked ? accent : '#994400'
+  return (
+    <div
+      style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
+    >
+      <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
+        {filled > 0 && (
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke={stroke} strokeWidth={unlocked ? 5 : 4}
+            strokeDasharray={`${dashLen} ${circumference}`}
+            strokeLinecap="butt"
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={unlocked ? { filter: `drop-shadow(0 0 5px ${accent})` } : undefined}
+          />
+        )}
+        {unlocked
+          ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold">✓</text>
+          : <text x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fill="#555">{count}/{maxCount}</text>
+        }
+      </svg>
+      <div style={{ fontSize: 9, color: unlocked ? accent : '#666', letterSpacing: 0.5, textAlign: 'center', marginTop: 3 }}>{label}</div>
+      {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
+    </div>
+  )
+}
+
+// Sable ability wheel — deep purple accent
+// mode='count': normal count→max wheel (Resonance, Refraction)
+// mode='nullfield': boolean shield indicator (Nullfield)
+function SableAbilityWheel({ count, unlocked, label, maxCount, tip, mode, nullfieldReady, nullfieldUsed }) {
+  const [show, setShow] = useState(false)
+  const [pos,  setPos]  = useState({ x: 0, y: 0 })
+  const timer = useRef(null)
+  const accent = '#9933ff'
+  const r = 34, cx = 40, cy = 40
+  const circumference = 2 * Math.PI * r
+
+  let innerEl
+  let strokeColor
+  let dashLen
+
+  if (mode === 'nullfield') {
+    if (!unlocked) {
+      // Tracking phase: show good-reads progress toward 3
+      const filled = Math.min(count ?? 0, maxCount)
+      dashLen = filled > 0 ? (circumference / maxCount) * filled : 0
+      strokeColor = '#551188'
+      innerEl = <text x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fill="#555">{count ?? 0}/{maxCount}</text>
+    } else {
+      const isReady = nullfieldReady && !nullfieldUsed
+      strokeColor = isReady ? accent : '#441166'
+      dashLen = circumference
+      innerEl = isReady
+        ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold">🛡</text>
+        : <text x={cx} y={cy + 6} textAnchor="middle" fontSize={15} fill="#441166">✕</text>
+    }
+  } else {
+    const filled = unlocked ? maxCount : Math.min(count ?? 0, maxCount)
+    dashLen = filled > 0 ? (circumference / maxCount) * filled : 0
+    strokeColor = unlocked ? accent : '#551188'
+    innerEl = unlocked
+      ? <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fill={accent} fontWeight="bold">✓</text>
+      : <text x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fill="#555">{count ?? 0}/{maxCount}</text>
+  }
+
+  return (
+    <div
+      style={{ width: 84, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default' }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
+    >
+      <svg viewBox="0 0 80 80" style={{ width: '100%', height: 'auto' }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#333" strokeWidth={4} />
+        {dashLen > 0 && (
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke={strokeColor} strokeWidth={unlocked ? 5 : 4}
+            strokeDasharray={`${dashLen} ${circumference}`}
+            strokeLinecap="butt"
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={unlocked ? { filter: `drop-shadow(0 0 5px ${accent})` } : undefined}
+          />
+        )}
+        {innerEl}
       </svg>
       <div style={{ fontSize: 9, color: unlocked ? accent : '#666', letterSpacing: 0.5, textAlign: 'center', marginTop: 3 }}>{label}</div>
       {show && tip && <TooltipBox {...tip} unlocked={unlocked} x={pos.x} y={pos.y} />}
@@ -590,7 +702,8 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit, ult
   const goodReadsCount = Math.min(3, ultGoodReads ?? 0)
   const chainCount     = ultChainAchieved ? 1 : 0
   const litCount       = ['AT', 'BL', 'SP'].filter(m => cycleLit?.[m]).length
-  const segmentsMet    = goodReadsCount + chainCount + litCount  // 0–7
+  const segmentsMet    = ready ? NUM_SEG : goodReadsCount + chainCount + litCount  // 0–7
+  const ultIcon = { ASSASSINATE: '🗡️', COLLAPSE: '💀', 'MIND BLAST': '⚡', HARVEST: '☠️', RAMPAGE: '🪓', SHATTER: '💜' }[ultName] ?? '⚔️'
 
   const conditions = [
     { label: `Good Reads ${goodReadsCount}/3`, done: goodReadsCount >= 3, detail: 'Toggle Read on and win the clash three times. Does not need to be consecutive.' },
@@ -616,16 +729,16 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit, ult
       }}
       onClick={isClickable ? onClick : undefined}
       onKeyDown={isClickable ? e => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
-      onMouseEnter={e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
-      onMouseMove={e  => setPos({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => { clearTimeout(timer.current); setShow(false) }}
+      onMouseEnter={isTouchDevice ? undefined : e => { setPos({ x: e.clientX, y: e.clientY }); timer.current = setTimeout(() => setShow(true), 300) }}
+      onMouseMove={isTouchDevice ? undefined : e => setPos({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={isTouchDevice ? undefined : () => { clearTimeout(timer.current); setShow(false) }}
     >
       <svg viewBox="0 0 88 88" style={{ width: 84, height: 84 }}>
         {/* Background track segments */}
         {Array.from({ length: NUM_SEG }, (_, i) => (
           <circle key={`track-${i}`}
             cx={cx} cy={cy} r={r} fill="none"
-            stroke="#222" strokeWidth={6}
+            stroke="#484848" strokeWidth={6}
             strokeDasharray={`${segLen} ${circumference - segLen}`}
             strokeDashoffset={-(i * slotLen)}
             transform={`rotate(-90 ${cx} ${cy})`}
@@ -656,12 +769,12 @@ function UltMeter({ accent, ready, ultGoodReads, ultChainAchieved, cycleLit, ult
         {ready
           ? <text x={cx} y={cy + 7} textAnchor="middle" fontSize={20} fill={accent} fontWeight="bold"
               style={{ animation: 'ultPulse 1.1s ease-in-out infinite' }}>✓</text>
-          : <text x={cx} y={cy + 4} textAnchor="middle" fontSize={13} fill={segmentsMet > 0 ? '#aaa' : '#444'}>{segmentsMet}/7</text>
+          : <text x={cx} y={cy + 8} textAnchor="middle" fontSize={22} style={{ userSelect: 'none', filter: 'grayscale(1) opacity(0.55)' }}>{ultIcon}</text>
         }
       </svg>
       <div style={{
         fontSize: 8, letterSpacing: 1, textAlign: 'center', marginTop: 2,
-        color: ready ? accent : '#444', fontWeight: ready ? 'bold' : 'normal',
+        color: ready ? accent : '#999', fontWeight: ready ? 'bold' : 'normal',
         userSelect: 'none',
       }}>{ultName ?? 'ULT'}</div>
       {show && (
@@ -785,6 +898,11 @@ function LogRow({ entry, p1Name, p2Name, p1Char, p2Char }) {
 
 const MOVE_EMOJI = { AT: '⚔️', BL: '🛡️', SP: '✨' }
 
+const vaelEvadeChance = (hp, maxHp) => {
+  const mx = Math.max(maxHp, 2)
+  return Math.min(0.25, Math.max(0.05, 0.05 + (mx - hp) / (mx - 1) * 0.20))
+}
+
 function HpBar({ hp, maxHp, alignRight = false, className }) {
   const pct = Math.max(0, hp / maxHp)
   const hue = Math.max(0, (pct - 0.1) / 0.9 * 120)
@@ -829,10 +947,11 @@ export default function GameBoard() {
   const forceCritRef = useRef(false)
   const [cpuAlwaysBlock, setCpuAlwaysBlock] = useState(false)
   const [hitNumbers, setHitNumbers] = useState({ p1: null, p2: null, key: 0 })
-  const [devUnlocked, setDevUnlocked] = useState(false)
-  const [devPrompt, setDevPrompt]     = useState(false)
-  const [devInput, setDevInput]       = useState('')
-  const [devError, setDevError]       = useState(false)
+  const [devUnlocked, setDevUnlocked]         = useState(false)
+  const [devPrompt, setDevPrompt]             = useState(false)
+  const [devInput, setDevInput]               = useState('')
+  const [devError, setDevError]               = useState(false)
+  const [showCycleHistory, setShowCycleHistory] = useState(false)
 
   // ── BGM ───────────────────────────────────────────────────────────────────
   const [bgmVolume, setBgmVolume] = useState(0.25)
@@ -965,6 +1084,9 @@ export default function GameBoard() {
     if      (lt.p2GodModeBroken)    alerts.push({ msg: `${nameP2} — GOD MODE BROKEN`,   color: '#666', glow: '#333, #111',       size: 34 })
     else if (lt.p2ZenBroken)        alerts.push({ msg: `${nameP2} — ZEN BROKEN`,         color: '#666', glow: '#333, #111',       size: 34 })
     else if (lt.p2FlowBroken)       alerts.push({ msg: `${nameP2} — FLOW BROKEN`,        color: '#666', glow: '#333, #111',       size: 34 })
+    // Sable Nullfield reflect
+    if (lt.p1SableNullfieldFired) alerts.push({ msg: `🛡 ${nameP1} — NULLFIELD`, color: '#cc66ff', glow: '#9933ff, #6600cc', size: 52 })
+    if (lt.p2SableNullfieldFired) alerts.push({ msg: `🛡 ${nameP2} — NULLFIELD`, color: '#cc66ff', glow: '#9933ff, #6600cc', size: 52 })
     // Cleanse confirmations — follow the activation banner
     if (lt.p1FlowCleansed) alerts.push({ msg: `✦ Negative effects cleansed for ${nameP1}`, color: '#aaffaa', glow: '#88ee22, #44aa00', size: 28 })
     if (lt.p2FlowCleansed) alerts.push({ msg: `✦ Negative effects cleansed for ${nameP2}`, color: '#aaffaa', glow: '#88ee22, #44aa00', size: 28 })
@@ -1061,6 +1183,10 @@ export default function GameBoard() {
       }
     })
 
+    socket.on('match_searching', () => {
+      setOnline(o => ({ ...o, phase: 'searching' }))
+    })
+
     socket.on('connect_error', (err) => {
       setOnline(o => ({ ...o, error: `Can't reach server: ${err.message}. Is npm run server running?` }))
     })
@@ -1074,6 +1200,19 @@ export default function GameBoard() {
     })
 
     return socket
+  }
+
+  function handleQuickMatch() {
+    setOnline(o => ({ ...o, phase: 'searching', error: null }))
+    const socket = openSocket()
+    const go = () => socket.emit('find_match')
+    if (socket.connected) go(); else socket.once('connect', go)
+  }
+
+  function handleCancelSearch() {
+    socketRef.current?.emit('cancel_match')
+    socketRef.current?.disconnect(); socketRef.current = null
+    setOnline(o => ({ ...o, phase: 'menu', error: null }))
   }
 
   function handleCreateRoom() {
@@ -1144,6 +1283,8 @@ export default function GameBoard() {
       'Mourne':      '/audio/VO/mourne VO.wav',
       'Vael Solace': '/audio/VO/vael solace VO.wav',
       'Wrack':       '/audio/VO/wrack VO.wav',
+      'Harrox':      '/audio/VO/harrox VO.wav',
+      'Sable':       '/audio/VO/sable VO.wav',
     }
     const src = voMap[char.name]
     if (src) new Audio(src).play()
@@ -1245,8 +1386,34 @@ export default function GameBoard() {
           </div>
         )}
 
-        {/* Create / Join buttons */}
-        {(phase === 'menu' || phase === 'create') && !roomId && (
+        {/* Main menu */}
+        {phase === 'menu' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <button onClick={() => { playMenuClick(); handleQuickMatch() }}
+              style={{ padding: '18px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
+              QUICK MATCH
+            </button>
+            <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'private', error: null })) }}
+              style={{ padding: '15px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #555', color: '#ccc', cursor: 'pointer' }}>
+              PRIVATE MATCH
+            </button>
+          </div>
+        )}
+
+        {/* Quick Match — searching */}
+        {phase === 'searching' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, color: '#5af', letterSpacing: 3, marginBottom: 24 }}>SEARCHING FOR OPPONENT</div>
+            <div style={{ color: '#5af', letterSpacing: 6, fontSize: 24, marginBottom: 32 }}>· · ·</div>
+            <button onClick={() => { playMenuClick(); handleCancelSearch() }}
+              style={{ padding: '10px 28px', fontSize: 11, letterSpacing: 2, background: 'none', border: '1px solid #555', color: '#888', cursor: 'pointer' }}>
+              CANCEL
+            </button>
+          </div>
+        )}
+
+        {/* Private match sub-menu */}
+        {phase === 'private' && !roomId && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button onClick={() => { playMenuClick(); handleCreateRoom() }}
               style={{ padding: '15px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
@@ -1255,6 +1422,10 @@ export default function GameBoard() {
             <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'join', error: null })) }}
               style={{ padding: '15px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #555', color: '#ccc', cursor: 'pointer' }}>
               JOIN ROOM
+            </button>
+            <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'menu' })) }}
+              style={{ marginTop: 4, padding: '8px 0', fontSize: 11, background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}>
+              ← Back
             </button>
           </div>
         )}
@@ -1275,7 +1446,7 @@ export default function GameBoard() {
               style={{ marginTop: 10, width: '100%', padding: '13px 0', fontSize: 13, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
               JOIN
             </button>
-            <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'menu' })) }}
+            <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'private' })) }}
               style={{ marginTop: 8, width: '100%', padding: '8px 0', fontSize: 11, background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}>
               Cancel
             </button>
@@ -1299,7 +1470,7 @@ export default function GameBoard() {
           </div>
         )}
 
-        {/* Connecting / waiting without roomId yet */}
+        {/* Connecting */}
         {(phase === 'create' || phase === 'waiting') && !roomId && (
           <div style={{ textAlign: 'center', color: '#888', fontSize: 12 }}>Connecting...</div>
         )}
@@ -1329,9 +1500,15 @@ export default function GameBoard() {
         name === 'vaelJinx'    ? 'JINX UNLOCKED' :
         name === 'vaelRegen'   ? 'REGEN UNLOCKED' :
         name === 'vaelEvade'   ? 'EVADE UNLOCKED' :
-        name === 'fester'      ? 'FESTER UNLOCKED' :
-        name === 'wither'      ? 'WITHER UNLOCKED' :
-        name === 'gall'        ? 'GALL UNLOCKED' :
+        name === 'fester'           ? 'FESTER UNLOCKED' :
+        name === 'wither'           ? 'WITHER UNLOCKED' :
+        name === 'gall'             ? 'GALL UNLOCKED' :
+        name === 'harroxIronSkin'    ? 'IRON SKIN UNLOCKED' :
+        name === 'harroxFrenzy'      ? 'FRENZY UNLOCKED' :
+        name === 'harroxMassacre'    ? 'MASSACRE UNLOCKED' :
+        name === 'sableResonance'    ? 'RESONANCE UNLOCKED' :
+        name === 'sableRefraction'   ? 'REFRACTION UNLOCKED' :
+        name === 'sableNullfield'    ? 'NULLFIELD PRIMED' :
         name.toUpperCase() + ' UNLOCKED'
       ),
       stateAfter: null,
@@ -1436,7 +1613,11 @@ export default function GameBoard() {
 
   function handleAiUlt() {
     if (animating || p2UltAnimating || collapseAnimating) return
-    playSound(sfxRand(SFX.em), 0.9)
+    const isCairanAiUlt = state.p2Character?.name === 'Cairan Vex'
+    const isVaelAiUlt   = state.p2.hasVael
+    if (!isCairanAiUlt && !isVaelAiUlt) playSound(sfxRand(SFX.em), 0.9)
+    if (isCairanAiUlt) playSound('/audio/ults/cairan-vex-ult.m4a', 1)
+    if (isVaelAiUlt)   playSound('/audio/ults/vael-solace-ult.wav', 1)
     const ultState = processUlt(state, 'p2')
 
     if (state.p2.hasMourne) {
@@ -1468,7 +1649,8 @@ export default function GameBoard() {
   function handleUlt() {
     if (animating || ultAnimating || collapseAnimating) return
     const isCairanUlt = state.p1Character?.name === 'Cairan Vex' || state.p2Character?.name === 'Cairan Vex'
-    if (!isCairanUlt) playSound(sfxRand(SFX.em), 0.9)
+    const isVaelUlt   = state.p1.hasVael || state.p2.hasVael
+    if (!isCairanUlt && !isVaelUlt) playSound(sfxRand(SFX.em), 0.9)
     const ultState = processUlt(state, 'p1')
 
     if (state.p1.hasMourne) {
@@ -1501,6 +1683,7 @@ export default function GameBoard() {
     setDisplayedState(state)
     setUltAnimating(true)
     if (isCairanUlt) playSound('/audio/ults/cairan-vex-ult.m4a', 1)
+    if (isVaelUlt)   playSound('/audio/ults/vael-solace-ult.wav', 1)
     setTimeout(() => {
       setState(ultState)
       setDisplayedState(null)
@@ -1636,12 +1819,30 @@ export default function GameBoard() {
       }
     }
     if (player.hasVael) {
-      const disables = player.vaelDisablesLanded  ?? 0
-      const clashes  = player.vaelNormalGoodReads ?? 0
+      const disables = player.vaelDisablesLanded   ?? 0
+      const normal   = player.vaelNormalGoodReads  ?? 0
+      const toggled  = player.vaelToggledGoodReads ?? 0
+      const clashes  = normal + toggled
       return {
         name: 'MIND BLAST',
-        description: 'Vael channels every disable she has inflicted into a psychic detonation — each disable amplified by every Good Clash she has won. Resets her disable count afterward.',
-        stat: `${disables} disables × ${clashes} Good Clashes = ${actual} dmg`,
+        description: 'Vael channels every disable she has inflicted into a psychic detonation — each disable amplified by every Good Read she has landed. Resets her disable count afterward.',
+        stat: `${disables} disables × ${clashes} Good Reads (${normal} clash + ${toggled} toggled) = ${actual} dmg`,
+      }
+    }
+    if (player.hasHarrox) {
+      const fury = player.harroxFury ?? 0
+      return {
+        name: 'RAMPAGE',
+        description: 'Deals damage equal to FURY × 5. If MASSACRE is unlocked, also applies 3 Bleed stacks to the opponent.',
+        stat: `Current damage: ${fury * 5} (${fury} FURY)`,
+      }
+    }
+    if (player.hasSable) {
+      const echoTotal = player.sableEchoTotal ?? 0
+      return {
+        name: 'SHATTER',
+        description: 'Sable unleashes all echo absorbed across the entire match as a single devastating strike. No lifesteal — pure glass-cannon payoff.',
+        stat: `Total echo absorbed: ${echoTotal} dmg`,
       }
     }
     if (player.hasWrack) {
@@ -1706,9 +1907,9 @@ export default function GameBoard() {
       `}</style>
     )}
     {ultAnimating && <div className="ult-screen-overlay" />}
-    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : myPlayer.hasWrack ? 'HARVEST' : 'ASSASSINATE'}</div>}
+    {ultAnimating && <div className="ult-text">{myPlayer.hasVael ? 'MIND BLAST' : myPlayer.hasWrack ? 'HARVEST' : myPlayer.hasHarrox ? 'RAMPAGE' : myPlayer.hasSable ? 'SHATTER' : 'ASSASSINATE'}</div>}
     {p2UltAnimating && <div className="ult-screen-overlay" />}
-    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'HARVEST' : 'ASSASSINATE'}</div>}
+    {p2UltAnimating && <div className="ult-text" style={{ color: '#f55', textShadow: '0 0 16px #f00, 0 0 40px #f00, 0 0 80px #a00' }}>{state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'HARVEST' : state.p2.hasHarrox ? 'RAMPAGE' : state.p2.hasSable ? 'SHATTER' : 'ASSASSINATE'}</div>}
     {collapseAnimating && <div className="collapse-overlay" />}
     {collapseAnimating && <div className="collapse-title">COLLAPSE</div>}
     {collapseAnimating && collapseData && (
@@ -1746,7 +1947,7 @@ export default function GameBoard() {
             </div>
           )}
           <div className={['portrait-wrap', collapseAnimating ? (collapseUser === 'p1' ? 'collapse-charge' : 'collapse-hit') : ultAnimating ? 'ult-charge' : p2UltAnimating ? 'ult-hit' : animating ? 'p1-fight' : undefined].filter(Boolean).join(' ')}
-               style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, display: 'inline-block' }}>
+               style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, display: 'block' }}>
             {hitNumbers.p1 && <DamageNumber key={`p1-${hitNumbers.key}`} value={hitNumbers.p1} />}
             <img
               src={state.p1Character?.portrait ?? '/src/img/tyrone.png'}
@@ -1787,6 +1988,21 @@ export default function GameBoard() {
                 <div style={{ fontSize: 11, color: '#f90', fontWeight: 'bold', letterSpacing: 2, whiteSpace: 'nowrap', textShadow: '0 0 8px #f80' }}>MOVE DISABLED!</div>
               </div>
             )}
+            {!gameOver && (
+              <div style={{ position: 'absolute', bottom: 8, left: 8, pointerEvents: 'auto', background: 'rgba(0,0,0,0.55)', borderRadius: 10, padding: '4px 4px 2px' }}>
+                <UltMeter
+                  accent={p1Accent}
+                  ready={state.p1.ultimateReady}
+                  ultGoodReads={state.p1.ultGoodReads ?? 0}
+                  ultChainAchieved={!!state.p1.ultChainAchieved}
+                  cycleLit={state.p1.cycleLit}
+                  ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : state.p1.hasWrack ? 'HARVEST' : state.p1.hasHarrox ? 'RAMPAGE' : state.p1.hasSable ? 'SHATTER' : 'ASSASSINATE'}
+                  onClick={!isOnline ? handleUlt : (online.myIndex === 0 ? handleOnlineUlt : null)}
+                  disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+                  tip={ultTip(state.p1)}
+                />
+              </div>
+            )}
           </div>
           <HpBar hp={dispP1Hp} maxHp={state.p1.maxHp} />
           {!isMobile && state.p1.godModeState && (
@@ -1794,12 +2010,6 @@ export default function GameBoard() {
           )}
           {!isMobile && !state.p1.godModeState && state.p1.zenState && (
             <div style={{ fontSize: 9, color: '#4f8', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>ZEN</div>
-          )}
-          {!isMobile && !state.p1.godModeState && !state.p1.zenState && state.p1.flowState && (
-            <div style={{ fontSize: 9, color: '#f80', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>FLOW</div>
-          )}
-          {!isMobile && state.p1.overloadActive && (
-            <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2 }}>OVERLOAD</div>
           )}
           {!isMobile && <div style={{ color: p1Accent, fontWeight: 'bold', fontSize: 12 }}>{p1Name}</div>}
           {!isMobile && <div>HP: {dispP1Hp}</div>}
@@ -1818,8 +2028,8 @@ export default function GameBoard() {
                       className={state.p1.godModeState ? 'godmode-btn' : undefined}
                       style={{
                         width: '100%', aspectRatio: '1', borderRadius: '50%',
-                        backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : state.p1.hasWrack ? '#88ee22' : p1Accent) : '#333',
-                        border: '2px solid ' + (state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#b06cff' : state.p1.hasWrack ? '#88ee22' : p1Accent) : (state.p1.hasWrack ? '#335511' : '#555')),
+                        backgroundColor: state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#7020c0' : state.p1.hasWrack ? '#88ee22' : state.p1.hasHarrox ? '#ff8800' : p1Accent) : '#333',
+                        border: '2px solid ' + (state.p1.cycleLit[move] ? (state.p1.hasDodge ? '#e03050' : state.p1.hasMourne ? '#b06cff' : state.p1.hasWrack ? '#88ee22' : state.p1.hasHarrox ? '#ff8800' : p1Accent) : (state.p1.hasWrack ? '#335511' : state.p1.hasHarrox ? '#663300' : '#555')),
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
                         fontSize: 9, fontWeight: 'bold', color: state.p1.cycleLit[move] ? '#000' : '#666',
                         textAlign: 'center', lineHeight: 1.2,
@@ -1927,6 +2137,26 @@ export default function GameBoard() {
               </div>
             </div>
           )}
+          {/* Echo charge bar — Sable P1 */}
+          {state.p1.hasSable && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 9, color: '#9933ff', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>ECHO CHARGE</div>
+                <div style={{ flex: 1, height: 8, background: '#222', border: '1px solid #444', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min((state.p1.sableEchoCharge ?? 0) / 50 * 100, 100)}%`,
+                    background: (state.p1.sableEchoCharge ?? 0) >= 50 ? '#fff' : '#9933ff',
+                    transition: 'width 0.2s ease',
+                    boxShadow: (state.p1.sableEchoCharge ?? 0) > 0 ? '0 0 6px #9933ff' : 'none',
+                  }} />
+                </div>
+                <div style={{ fontSize: 10, color: (state.p1.sableEchoCharge ?? 0) > 0 ? '#9933ff' : '#444', fontWeight: 'bold', minWidth: 28, textAlign: 'right' }}>
+                  {state.p1.sableEchoCharge ?? 0}
+                </div>
+              </div>
+            </div>
+          )}
           {/* Ability progress wheels — Cairan */}
           {state.p1.hasDodge && (
             <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
@@ -1941,6 +2171,26 @@ export default function GameBoard() {
               <MourneAbilityWheel count={state.p1.selfDamageTaken}    unlocked={state.p1.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p1.selfDamageTotal}    unlocked={state.p1.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
               <MourneAbilityWheel count={state.p1.goodToggledSpReads} unlocked={state.p1.leechUnlocked}    label="Leech"    maxCount={3}  tip={TIPS.leech} />
+            </div>
+          )}
+          {/* Evade chance bar — Vael Solace P1 */}
+          {state.p1.hasVael && state.p1.vaelEvadeUnlocked && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 9, color: '#00ccff', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>EVADE</div>
+                <div style={{ flex: 1, height: 8, background: '#222', border: '1px solid #444', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${(vaelEvadeChance(dispP1Hp, state.p1.maxHp) / 0.25) * 100}%`,
+                    background: vaelEvadeChance(dispP1Hp, state.p1.maxHp) >= 0.25 ? '#fff' : '#00ccff',
+                    transition: 'width 0.4s ease',
+                    boxShadow: '0 0 6px #00ccff',
+                  }} />
+                </div>
+                <div style={{ fontSize: 10, color: '#00ccff', fontWeight: 'bold', minWidth: 36, textAlign: 'right' }}>
+                  {Math.round(vaelEvadeChance(dispP1Hp, state.p1.maxHp) * 100)}%
+                </div>
+              </div>
             </div>
           )}
           {/* Ability progress wheels — Vael Solace */}
@@ -1959,32 +2209,35 @@ export default function GameBoard() {
               <WrackAbilityWheel count={state.p1.wrackReadTriggers}  unlocked={state.p1.gallUnlocked}      label="GALL"      maxCount={4} tip={TIPS.wrackGall} />
             </div>
           )}
+          {/* Ability progress wheels — Harrox */}
+          {state.p1.hasHarrox && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+              <HarroxAbilityWheel count={state.p1.harroxFury} unlocked={state.p1.harroxIronSkinUnlocked} label="IRON SKIN" maxCount={6}  tip={{ ...TIPS.harroxIronSkin, stat: `FURY: ${state.p1.harroxFury}` }} />
+              <HarroxAbilityWheel count={state.p1.harroxFury} unlocked={state.p1.harroxFrenzyUnlocked}   label="FRENZY"    maxCount={12} tip={{ ...TIPS.harroxFrenzy,   stat: `FURY: ${state.p1.harroxFury}` }} />
+              <HarroxAbilityWheel count={state.p1.harroxFury} unlocked={state.p1.harroxMassacreUnlocked} label="MASSACRE"  maxCount={18} tip={{ ...TIPS.harroxMassacre, stat: `FURY: ${state.p1.harroxFury}` }} />
+            </div>
+          )}
+          {/* Ability progress wheels — Sable */}
+          {state.p1.hasSable && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280 }}>
+              <SableAbilityWheel mode="count"     count={state.p1.sableHitsTaken}   unlocked={state.p1.sableResonanceUnlocked}  label="RESONANCE"  maxCount={3} tip={{ ...TIPS.sableResonance,  stat: `Hits taken: ${state.p1.sableHitsTaken ?? 0}` }} />
+              <SableAbilityWheel mode="count"     count={state.p1.sableEchoBursts}  unlocked={state.p1.sableRefractionUnlocked} label="REFRACTION" maxCount={2} tip={{ ...TIPS.sableRefraction, stat: `Echo bursts: ${state.p1.sableEchoBursts ?? 0}` }} />
+              <SableAbilityWheel mode="nullfield" count={state.p1.sableGoodReads ?? 0} maxCount={3} unlocked={state.p1.sableNullfieldUnlocked} nullfieldReady={state.p1.sableNullfieldReady} nullfieldUsed={state.p1.sableNullfieldUsed} label="NULLFIELD" tip={{ ...TIPS.sableNullfield, stat: state.p1.sableNullfieldUsed ? 'SPENT' : state.p1.sableNullfieldUnlocked ? 'ARMED — reflects next lethal hit' : `Good Reads: ${state.p1.sableGoodReads ?? 0}/3` }} />
+            </div>
+          )}
           {/* Stat-up flashes */}
           <div style={{ minHeight: 14, marginTop: 2 }}>
             {statUpFlashes.p1ke && <div key={`p1ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p1nb && <div key={`p1nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
           </div>
-          {!gameOver && (
-            <div style={{ marginTop: 6 }}>
-              <UltMeter
-                accent={p1Accent}
-                ready={state.p1.ultimateReady}
-                ultGoodReads={state.p1.ultGoodReads ?? 0}
-                ultChainAchieved={!!state.p1.ultChainAchieved}
-                cycleLit={state.p1.cycleLit}
-                ultName={state.p1.hasMourne ? 'COLLAPSE' : state.p1.hasVael ? 'MIND BLAST' : state.p1.hasWrack ? 'HARVEST' : 'ASSASSINATE'}
-                onClick={!isOnline ? handleUlt : (online.myIndex === 0 ? handleOnlineUlt : null)}
-                disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-                tip={ultTip(state.p1)}
-              />
+          {/* DEV: cycleSet rolling window */}
+          {showCycleHistory && (
+            <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#555', marginTop: 4 }}>
+              cycle: [{(state.p1.cycleSet ?? []).map((m, i) => (
+                <span key={i} style={{ color: m === 'AT' ? '#7df' : m === 'SP' ? '#c8f' : '#aaa', marginRight: 2 }}>{m}</span>
+              ))}]
             </div>
           )}
-          {/* DEV: cycleSet rolling window */}
-          <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#555', marginTop: 4 }}>
-            cycle: [{(state.p1.cycleSet ?? []).map((m, i) => (
-              <span key={i} style={{ color: m === 'AT' ? '#7df' : m === 'SP' ? '#c8f' : '#aaa', marginRight: 2 }}>{m}</span>
-            ))}]
-          </div>
         </div>
 
         {/* ── P2 ── */}
@@ -1994,18 +2247,6 @@ export default function GameBoard() {
               <span style={{ color: p2Accent, fontWeight: 'bold', marginRight: 4 }}>{p2Name}</span>
               <span style={{ color: '#aaa' }}>HP:{dispP2Hp} AT:{Math.max(state.p2.atDmgBuff, state.p2.baseAtDamage)} SP:{state.p2.hasMourne && state.p2.overloadActive ? Math.floor(Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage) * 1.75) : Math.max(state.p2.spDmgBuff, state.p2.baseSpDamage)}</span>
             </div>
-          )}
-          {!isMobile && state.p2.godModeState && (
-            <div style={{ fontSize: 9, color: '#ffe', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>GOD MODE</div>
-          )}
-          {!isMobile && !state.p2.godModeState && state.p2.zenState && (
-            <div style={{ fontSize: 9, color: '#4f8', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>ZEN</div>
-          )}
-          {!isMobile && !state.p2.godModeState && !state.p2.zenState && state.p2.flowState && (
-            <div style={{ fontSize: 9, color: '#f80', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>FLOW</div>
-          )}
-          {!isMobile && state.p2.overloadActive && (
-            <div style={{ fontSize: 9, color: '#b06cff', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>OVERLOAD</div>
           )}
           <div className={['portrait-wrap', collapseAnimating ? (collapseUser === 'p2' ? 'collapse-charge' : 'collapse-hit') : ultAnimating ? 'ult-hit' : p2UltAnimating ? 'ult-charge' : animating ? 'p2-fight' : undefined].filter(Boolean).join(' ')}
                style={{ position: 'relative', width: 280, height: 280, marginBottom: 4, marginLeft: 'auto', display: 'block' }}>
@@ -2049,8 +2290,29 @@ export default function GameBoard() {
                 <div style={{ fontSize: 11, color: '#f90', fontWeight: 'bold', letterSpacing: 2, whiteSpace: 'nowrap', textShadow: '0 0 8px #f80' }}>MOVE DISABLED!</div>
               </div>
             )}
+            {!gameOver && (
+              <div style={{ position: 'absolute', bottom: 8, right: 8, pointerEvents: 'auto', background: 'rgba(0,0,0,0.55)', borderRadius: 10, padding: '4px 4px 2px' }}>
+                <UltMeter
+                  accent={p2Accent}
+                  ready={state.p2.ultimateReady}
+                  ultGoodReads={state.p2.ultGoodReads ?? 0}
+                  ultChainAchieved={!!state.p2.ultChainAchieved}
+                  cycleLit={state.p2.cycleLit}
+                  ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'HARVEST' : state.p2.hasHarrox ? 'RAMPAGE' : state.p2.hasSable ? 'SHATTER' : 'ASSASSINATE'}
+                  onClick={isOnline && online.myIndex === 1 ? handleOnlineUlt : null}
+                  disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
+                  tip={ultTip(state.p2)}
+                />
+              </div>
+            )}
           </div>
           <HpBar hp={dispP2Hp} maxHp={state.p2.maxHp} alignRight />
+          {!isMobile && state.p2.godModeState && (
+            <div style={{ fontSize: 9, color: '#ffe', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>GOD MODE</div>
+          )}
+          {!isMobile && !state.p2.godModeState && state.p2.zenState && (
+            <div style={{ fontSize: 9, color: '#4f8', fontWeight: 'bold', letterSpacing: 2, marginBottom: 2, textAlign: 'right' }}>ZEN</div>
+          )}
           {!isMobile && <div style={{ color: p2Accent, fontWeight: 'bold', fontSize: 12 }}>{p2Name}</div>}
           {!isMobile && <div>HP: {dispP2Hp}</div>}
           {!isMobile && <div style={{ color: '#aaa', fontSize: 11 }}>
@@ -2067,8 +2329,8 @@ export default function GameBoard() {
                       onClick={isP2Controllable && !moveDisabled ? () => handleOnlineMove(move) : undefined}
                       style={{
                         width: '100%', aspectRatio: '1', borderRadius: '50%',
-                        backgroundColor: state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#7020c0' : state.p2.hasWrack ? '#88ee22' : p2Accent) : '#333',
-                        border: '2px solid ' + (state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#b06cff' : state.p2.hasWrack ? '#88ee22' : p2Accent) : (state.p2.hasWrack ? '#335511' : '#555')),
+                        backgroundColor: state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#7020c0' : state.p2.hasWrack ? '#88ee22' : state.p2.hasHarrox ? '#ff8800' : p2Accent) : '#333',
+                        border: '2px solid ' + (state.p2.cycleLit[move] ? (state.p2.hasDodge ? '#e03050' : state.p2.hasMourne ? '#b06cff' : state.p2.hasWrack ? '#88ee22' : state.p2.hasHarrox ? '#ff8800' : p2Accent) : (state.p2.hasWrack ? '#335511' : state.p2.hasHarrox ? '#663300' : '#555')),
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
                         fontSize: 9, fontWeight: 'bold', color: state.p2.cycleLit[move] ? '#000' : '#666',
                         textAlign: 'center', lineHeight: 1.2,
@@ -2162,6 +2424,26 @@ export default function GameBoard() {
               </div>
             </div>
           )}
+          {/* Echo charge bar — Sable P2 */}
+          {state.p2.hasSable && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 10, color: (state.p2.sableEchoCharge ?? 0) > 0 ? '#9933ff' : '#444', fontWeight: 'bold', minWidth: 28 }}>
+                  {state.p2.sableEchoCharge ?? 0}
+                </div>
+                <div style={{ flex: 1, height: 8, background: '#222', border: '1px solid #444', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min((state.p2.sableEchoCharge ?? 0) / 50 * 100, 100)}%`,
+                    background: (state.p2.sableEchoCharge ?? 0) >= 50 ? '#fff' : '#9933ff',
+                    transition: 'width 0.2s ease',
+                    boxShadow: (state.p2.sableEchoCharge ?? 0) > 0 ? '0 0 6px #9933ff' : 'none',
+                  }} />
+                </div>
+                <div style={{ fontSize: 9, color: '#9933ff', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>ECHO CHARGE</div>
+              </div>
+            </div>
+          )}
           {/* Ability progress wheels — Cairan P2 */}
           {state.p2.hasDodge && (
             <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
@@ -2176,6 +2458,27 @@ export default function GameBoard() {
               <MourneAbilityWheel count={state.p2.selfDamageTaken}    unlocked={state.p2.siphonUnlocked}   label="Siphon"   maxCount={5}  tip={TIPS.siphon} />
               <MourneAbilityWheel count={state.p2.selfDamageTotal}    unlocked={state.p2.overloadUnlocked} label="Overload" maxCount={10} tip={TIPS.overload} />
               <MourneAbilityWheel count={state.p2.goodToggledSpReads} unlocked={state.p2.leechUnlocked}    label="Leech"    maxCount={3}  tip={TIPS.leech} />
+            </div>
+          )}
+          {/* Evade chance bar — Vael Solace P2 */}
+          {state.p2.hasVael && state.p2.vaelEvadeUnlocked && (
+            <div className="char-bar-wrap" style={{ marginTop: 5, width: 280, marginLeft: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 10, color: '#00ccff', fontWeight: 'bold', minWidth: 36 }}>
+                  {Math.round(vaelEvadeChance(dispP2Hp, state.p2.maxHp) * 100)}%
+                </div>
+                <div style={{ flex: 1, height: 8, background: '#222', border: '1px solid #444', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${(vaelEvadeChance(dispP2Hp, state.p2.maxHp) / 0.25) * 100}%`,
+                    background: vaelEvadeChance(dispP2Hp, state.p2.maxHp) >= 0.25 ? '#fff' : '#00ccff',
+                    transition: 'width 0.4s ease',
+                    boxShadow: '0 0 6px #00ccff',
+                    marginLeft: 'auto',
+                  }} />
+                </div>
+                <div style={{ fontSize: 9, color: '#00ccff', fontWeight: 'bold', letterSpacing: 1, whiteSpace: 'nowrap' }}>EVADE</div>
+              </div>
             </div>
           )}
           {/* Ability progress wheels — Vael Solace P2 */}
@@ -2194,32 +2497,35 @@ export default function GameBoard() {
               <WrackAbilityWheel count={state.p2.wrackReadTriggers}  unlocked={state.p2.gallUnlocked}      label="GALL"      maxCount={4} tip={TIPS.wrackGall} />
             </div>
           )}
+          {/* Ability progress wheels — Harrox P2 */}
+          {state.p2.hasHarrox && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+              <HarroxAbilityWheel count={state.p2.harroxFury} unlocked={state.p2.harroxIronSkinUnlocked} label="IRON SKIN" maxCount={6}  tip={{ ...TIPS.harroxIronSkin, stat: `FURY: ${state.p2.harroxFury}` }} />
+              <HarroxAbilityWheel count={state.p2.harroxFury} unlocked={state.p2.harroxFrenzyUnlocked}   label="FRENZY"    maxCount={12} tip={{ ...TIPS.harroxFrenzy,   stat: `FURY: ${state.p2.harroxFury}` }} />
+              <HarroxAbilityWheel count={state.p2.harroxFury} unlocked={state.p2.harroxMassacreUnlocked} label="MASSACRE"  maxCount={18} tip={{ ...TIPS.harroxMassacre, stat: `FURY: ${state.p2.harroxFury}` }} />
+            </div>
+          )}
+          {/* Ability progress wheels — Sable */}
+          {state.p2.hasSable && (
+            <div className="ability-wheels-row" style={{ display: 'flex', gap: 8, marginTop: 8, width: 280, marginLeft: 'auto' }}>
+              <SableAbilityWheel mode="count"     count={state.p2.sableHitsTaken}   unlocked={state.p2.sableResonanceUnlocked}  label="RESONANCE"  maxCount={3} tip={{ ...TIPS.sableResonance,  stat: `Hits taken: ${state.p2.sableHitsTaken ?? 0}` }} />
+              <SableAbilityWheel mode="count"     count={state.p2.sableEchoBursts}  unlocked={state.p2.sableRefractionUnlocked} label="REFRACTION" maxCount={2} tip={{ ...TIPS.sableRefraction, stat: `Echo bursts: ${state.p2.sableEchoBursts ?? 0}` }} />
+              <SableAbilityWheel mode="nullfield" count={state.p2.sableGoodReads ?? 0} maxCount={3} unlocked={state.p2.sableNullfieldUnlocked} nullfieldReady={state.p2.sableNullfieldReady} nullfieldUsed={state.p2.sableNullfieldUsed} label="NULLFIELD" tip={{ ...TIPS.sableNullfield, stat: state.p2.sableNullfieldUsed ? 'SPENT' : state.p2.sableNullfieldUnlocked ? 'ARMED — reflects next lethal hit' : `Good Reads: ${state.p2.sableGoodReads ?? 0}/3` }} />
+            </div>
+          )}
           {/* Stat-up flashes */}
           <div style={{ minHeight: 14, marginTop: 2, textAlign: 'right' }}>
             {statUpFlashes.p2ke && <div key={`p2ke-${statUpFlashes.key}`} className="stat-up">CRIT CHANCE UP!</div>}
             {statUpFlashes.p2nb && <div key={`p2nb-${statUpFlashes.key}`} className="stat-up">EVASION CHANCE UP!</div>}
           </div>
-          {!gameOver && (
-            <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
-              <UltMeter
-                accent={p2Accent}
-                ready={state.p2.ultimateReady}
-                ultGoodReads={state.p2.ultGoodReads ?? 0}
-                ultChainAchieved={!!state.p2.ultChainAchieved}
-                cycleLit={state.p2.cycleLit}
-                ultName={state.p2.hasMourne ? 'COLLAPSE' : state.p2.hasVael ? 'MIND BLAST' : state.p2.hasWrack ? 'HARVEST' : 'ASSASSINATE'}
-                onClick={isOnline && online.myIndex === 1 ? handleOnlineUlt : null}
-                disabled={animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)}
-                tip={ultTip(state.p2)}
-              />
+          {/* DEV: cycleSet rolling window */}
+          {showCycleHistory && (
+            <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#555', marginTop: 4, textAlign: 'right' }}>
+              [{(state.p2.cycleSet ?? []).map((m, i) => (
+                <span key={i} style={{ color: m === 'AT' ? '#7df' : m === 'SP' ? '#c8f' : '#aaa', marginRight: 2 }}>{m}</span>
+              ))}] :cycle
             </div>
           )}
-          {/* DEV: cycleSet rolling window */}
-          <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#555', marginTop: 4, textAlign: 'right' }}>
-            [{(state.p2.cycleSet ?? []).map((m, i) => (
-              <span key={i} style={{ color: m === 'AT' ? '#7df' : m === 'SP' ? '#c8f' : '#aaa', marginRight: 2 }}>{m}</span>
-            ))}] :cycle
-          </div>
         </div>
       </div>
 
@@ -2324,6 +2630,15 @@ export default function GameBoard() {
                 style={{ accentColor: '#f80' }}
               />
               <span style={{ color: cpuAlwaysBlock ? '#f80' : '#555' }}>CPU always block</span>
+            </label>
+            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+              <input
+                type="checkbox"
+                checked={showCycleHistory}
+                onChange={e => setShowCycleHistory(e.target.checked)}
+                style={{ accentColor: '#f80' }}
+              />
+              <span style={{ color: showCycleHistory ? '#f80' : '#555' }}>Show cycle history</span>
             </label>
             <button
               onClick={handleUlt}

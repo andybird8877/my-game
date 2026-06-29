@@ -36,6 +36,7 @@ const PORT = process.env.PORT || 3001
 // }
 
 const rooms = {}
+const matchmakingQueue = [] // [socketId, ...]
 
 function roomOf(socketId) {
   return Object.entries(rooms).find(([, r]) => r.players.includes(socketId))
@@ -82,6 +83,41 @@ io.on('connection', (socket) => {
     socket.join(roomId)
     socket.emit('room_created', { roomId })
     console.log(`[room] ${roomId} created by ${socket.id}`)
+  })
+
+  // ── Quick Match ────────────────────────────────────────────────────────────
+  socket.on('find_match', () => {
+    // Already in a room or queue — ignore
+    if (roomOf(socket.id)) return
+    if (matchmakingQueue.includes(socket.id)) return
+
+    if (matchmakingQueue.length > 0) {
+      const opponentId = matchmakingQueue.shift()
+      // Pair into a new room
+      const roomId = randomUUID().slice(0, 8).toUpperCase()
+      rooms[roomId] = {
+        players:      [opponentId, socket.id],
+        phase:        'char_select',
+        chars:        [null, null],
+        gameState:    null,
+        pendingMoves: {},
+      }
+      socket.join(roomId)
+      const opponentSocket = io.sockets.sockets.get(opponentId)
+      if (opponentSocket) opponentSocket.join(roomId)
+      console.log(`[match] ${roomId} paired ${opponentId} vs ${socket.id}`)
+      broadcast(roomId)
+    } else {
+      matchmakingQueue.push(socket.id)
+      socket.emit('match_searching')
+      console.log(`[match] ${socket.id} queued (queue length: ${matchmakingQueue.length})`)
+    }
+  })
+
+  socket.on('cancel_match', () => {
+    const idx = matchmakingQueue.indexOf(socket.id)
+    if (idx !== -1) matchmakingQueue.splice(idx, 1)
+    console.log(`[match] ${socket.id} cancelled search`)
   })
 
   // ── Join room ──────────────────────────────────────────────────────────────
@@ -224,6 +260,10 @@ io.on('connection', (socket) => {
   // ── Disconnect ─────────────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`[-] ${socket.id}`)
+    // Remove from matchmaking queue if waiting
+    const qi = matchmakingQueue.indexOf(socket.id)
+    if (qi !== -1) matchmakingQueue.splice(qi, 1)
+
     const entry = roomOf(socket.id)
     if (!entry) return
     const [roomId, room] = entry

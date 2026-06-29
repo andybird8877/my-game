@@ -18,13 +18,11 @@ function mostLikelyMove(moves) {
 // Detect if the player is clearly spamming one move.
 // Returns { move, strength } where strength is 0–1, or null if no spam detected.
 function detectPlayerSpam(log) {
-  // Short window (last 4) for early detection
   const short = log.slice(-4).map(e => e.p1Move)
   const shortFreq = moveFrequency(short)
   for (const [move, count] of Object.entries(shortFreq)) {
     if (count >= 3) return { move, strength: count / short.length }
   }
-  // Medium window (last 6) for sustained spam
   const medium = log.slice(-6).map(e => e.p1Move)
   const medFreq = moveFrequency(medium)
   for (const [move, count] of Object.entries(medFreq)) {
@@ -33,7 +31,7 @@ function detectPlayerSpam(log) {
   return null
 }
 
-// How many times has each CPU move been punished (p2 took damage) recently?
+// How many times has each CPU move been punished recently?
 function getPunishments(log, lookback = 5) {
   const counts = { AT: 0, BL: 0, SP: 0 }
   log.slice(-lookback).forEach(e => {
@@ -59,7 +57,7 @@ export function getAiMove(gameState) {
   const predicted = mostLikelyMove(recent)
   const confidence = recent.length > 0 ? moveFrequency(recent)[predicted] / recent.length : 0
 
-  // Player spam detection (checked early — high priority)
+  // Player spam detection
   const playerSpam = detectPlayerSpam(log)
 
   // Player cycle threat
@@ -67,7 +65,7 @@ export function getAiMove(gameState) {
   const p1IsOneAway = new Set(p1.cycleSet).size === 2
   const p1ThreatenedMove = p1IsOneAway ? p1Needs[0] : null
 
-  // CPU cycle needs
+  // CPU combo-cycle needs
   const p2Needs = MOVES.filter(m => !p2.cycleSet.includes(m))
 
   // CPU spam streak state
@@ -76,29 +74,59 @@ export function getAiMove(gameState) {
   const streakBeingPunished = streakMove && punishments[streakMove] >= 2
   const inSpamStreak = streakMove && !streakBeingPunished
 
-  // READ: only when fairly confident, never mid-streak.
-  // When player is in flow/zen/god mode, read aggressively to try to break it.
+  // ── ULT CONDITION TRACKING ────────────────────────────────────────────────
+  // Condition 1: good reads (need 3)
+  const p2GoodReads = p2.ultGoodReads ?? 0
+  const needsGoodReads = p2GoodReads < 3
+
+  // Condition 2: power chain — 3 AT or SP in a row with read off
+  const chainDone = !!p2.ultChainAchieved
+  // Which chain is further along? Commit to that one.
+  const chainTarget = !chainDone
+    ? ((p2.spChain ?? 0) > (p2.atChain ?? 0) ? 'SP' : 'AT')
+    : null
+  // "Building chain" = chain not done AND we already have 1+ in a streak
+  const buildingChain = !chainDone && ((p2.atChain ?? 0) >= 1 || (p2.spChain ?? 0) >= 1)
+
+  // Condition 3: cycle lit — each of AT, BL, SP played once with read off
+  const p2UnlitMoves = MOVES.filter(m => !p2.cycleLit?.[m])
+  const needsCycleLit = p2UnlitMoves.length > 0
+
+  // All ult conditions done (ult might not be flagged ready yet, but all pieces collected)
+  const ultConditionsMet = !needsGoodReads && chainDone && !needsCycleLit
+
+  // ── READ DECISION ─────────────────────────────────────────────────────────
   const p1InFlow = p1.flowState || p1.zenState || p1.godModeState
   let readChance = 0
-  if (p1InFlow) {
-    // Flow-breaking priority: high base chance that scales with tier
-    const tierBoost = p1.godModeState ? 0.85 : p1.zenState ? 0.75 : 0.65
-    readChance = tierBoost
+
+  if (buildingChain) {
+    // Chain requires read OFF — never read while mid-chain
+    readChance = 0
+  } else if (p1InFlow) {
+    // Aggressively read to break player flow state
+    readChance = p1.godModeState ? 0.85 : p1.zenState ? 0.75 : 0.65
   } else if (!inSpamStreak) {
     let eff = confidence
     if (p1IsOneAway) eff = Math.min(1, eff + 0.25)
     const lastTwo = recent.slice(-2)
     if (lastTwo.length === 2 && lastTwo[0] === lastTwo[1]) eff = Math.min(1, eff + 0.2)
-    if (eff >= 0.55) readChance = eff * 0.45
+
+    if (needsGoodReads && eff >= 0.45) {
+      // Boost read chance when chasing good-read condition — more aggressive
+      readChance = eff * 0.65
+    } else if (eff >= 0.55) {
+      readChance = eff * 0.45
+    }
   }
+
   const useRead = Math.random() < readChance
 
+  // ── MOVE SELECTION ────────────────────────────────────────────────────────
   let move
 
-  // 1. Player is spamming — counter it with high probability
-  //    Scales with spam strength: 3/4 turns → 80%, 4/4 → 90%, etc.
-  //    Only skipped if CPU itself is mid-streak and not yet being punished.
-  if (playerSpam && !inSpamStreak) {
+  // 1. Player is spamming — counter with high probability
+  //    Skip if we're mid-chain-build (don't break the chain for this)
+  if (playerSpam && !inSpamStreak && !buildingChain) {
     const counterChance = Math.min(0.92, 0.55 + playerSpam.strength * 0.45)
     if (Math.random() < counterChance) {
       move = COUNTER[playerSpam.move]
@@ -106,11 +134,12 @@ export function getAiMove(gameState) {
   }
 
   if (!move) {
-    // 2. Continue CPU spam streak (not being punished)
-    if (inSpamStreak) {
-      move = streakMove
+    // 2. Continue chain run toward ultChainAchieved
+    //    (only while not being punished for the chain move)
+    if (buildingChain && !streakBeingPunished) {
+      move = chainTarget
 
-    // 3. CPU streak is being punished — adapt
+    // 3. Chain is being punished — adapt (safety valve)
     } else if (streakBeingPunished) {
       const punisher = getCommonPunisher(log, streakMove)
       move = punisher ? COUNTER[punisher] : COUNTER[streakMove]
@@ -119,21 +148,37 @@ export function getAiMove(gameState) {
     } else if (p1IsOneAway) {
       move = COUNTER[p1ThreatenedMove]
 
-    // 5. Occasionally start a spam run (only when no obvious player pattern)
-    } else if (!playerSpam && Math.random() < 0.20) {
+    // 5. Light unlit cycle moves — play an unlit move with read off.
+    //    Skip if we're mid-read this turn (cycle lit requires read off).
+    } else if (needsCycleLit && !useRead && Math.random() < 0.60) {
+      const counterMove = COUNTER[predicted]
+      // Prefer the unlit move that also counters the player's predicted move
+      move = p2UnlitMoves.includes(counterMove)
+        ? counterMove
+        : p2UnlitMoves[Math.floor(Math.random() * p2UnlitMoves.length)]
+
+    // 6. Start a chain run toward ultChainAchieved
+    } else if (!chainDone && !playerSpam && Math.random() < 0.35) {
+      const safe = ['AT', 'SP'].filter(m => punishments[m] < 2)
+      move = safe.length > 0
+        ? safe[Math.floor(Math.random() * safe.length)]
+        : chainTarget ?? 'AT'
+
+    // 7. Occasionally start a spam run (when ult conditions are met, or as fallback)
+    } else if (!playerSpam && Math.random() < (ultConditionsMet ? 0.25 : 0.12)) {
       const candidates = ['AT', 'SP'].filter(m => punishments[m] < 2)
       move = candidates.length > 0
         ? candidates[Math.floor(Math.random() * candidates.length)]
         : COUNTER[predicted]
 
-    // 6. Build CPU's own cycle — prefer a move that also counters predicted
+    // 8. Build CPU's own combo cycle
     } else if (p2Needs.length > 0) {
       const counterMove = COUNTER[predicted]
       const safe = p2Needs.filter(m => punishments[m] < 2)
       const pool = safe.length > 0 ? safe : p2Needs
       move = pool.includes(counterMove) ? counterMove : pool[Math.floor(Math.random() * pool.length)]
 
-    // 7. Default: counter the predicted move
+    // 9. Default: counter the predicted move
     } else {
       move = COUNTER[predicted]
     }

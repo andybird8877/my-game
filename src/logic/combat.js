@@ -110,7 +110,7 @@ export function calculateDamage({ outcome, loser, winner, p1Move, p2Move, p1Read
 export function createInitialState(p1Char = null, p2Char = null) {
   const p1Hp = p1Char?.hp ?? 300
   const p2Hp = p2Char?.hp ?? 300
-  const makePlayer = (hp, baseAtDamage, baseSpDamage, critChance, hasDodge, hasMourne, hasVael, hasWrack, weight, cls) => ({
+  const makePlayer = (hp, baseAtDamage, baseSpDamage, critChance, hasDodge, hasMourne, hasVael, hasWrack, hasHarrox, weight, cls) => ({
     hp, maxHp: hp, baseAtDamage, baseSpDamage, critChance,
     weight: weight ?? 'medium',
     class:  cls    ?? 'warrior',
@@ -154,10 +154,16 @@ export function createInitialState(p1Char = null, p2Char = null) {
     witherUnlocked: false,
     gallUnlocked: false,
     wrackPoisonDealt: 0,
+    // Harrox ability trackers (all players carry these; only used when hasHarrox)
+    hasHarrox: !!hasHarrox,
+    harroxFury: 0,               // count of distinct turns Harrox took direct damage
+    harroxIronSkinUnlocked: false,  // unlocks at fury 6: +3 baseAtDamage
+    harroxFrenzyUnlocked: false,    // unlocks at fury 12: crit→8%, AT chain floor 1
+    harroxMassacreUnlocked: false,  // unlocks at fury 18: bleed on every AT win
   })
   return {
-    p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.hasWrack, p1Char?.weight, p1Char?.class),
-    p2: makePlayer(p2Hp, p2Char?.atDamage ?? AT_DAMAGE, p2Char?.spDamage ?? SP_DAMAGE, p2Char?.critChance ?? 0, p2Char?.hasDodge, p2Char?.hasMourne, p2Char?.hasVael, p2Char?.hasWrack, p2Char?.weight, p2Char?.class),
+    p1: makePlayer(p1Hp, p1Char?.atDamage ?? AT_DAMAGE, p1Char?.spDamage ?? SP_DAMAGE, p1Char?.critChance ?? 0, p1Char?.hasDodge, p1Char?.hasMourne, p1Char?.hasVael, p1Char?.hasWrack, p1Char?.hasHarrox, p1Char?.weight, p1Char?.class),
+    p2: makePlayer(p2Hp, p2Char?.atDamage ?? AT_DAMAGE, p2Char?.spDamage ?? SP_DAMAGE, p2Char?.critChance ?? 0, p2Char?.hasDodge, p2Char?.hasMourne, p2Char?.hasVael, p2Char?.hasWrack, p2Char?.hasHarrox, p2Char?.weight, p2Char?.class),
     p1Character: p1Char,
     p2Character: p2Char,
     lastTurn: null,
@@ -267,15 +273,20 @@ export function calcUltDamage(player) {
     return { raw, actual }
   }
   if (player.hasVael) {
-    // MIND BLAST: disables × Good Clashes (non-toggled wins) accumulated this match
-    const disables = player.vaelDisablesLanded  ?? 0
-    const clashes  = player.vaelNormalGoodReads ?? 0
+    // MIND BLAST: disables × all good reads (toggled + non-toggled) accumulated this match
+    const disables = player.vaelDisablesLanded   ?? 0
+    const clashes  = (player.vaelNormalGoodReads ?? 0) + (player.vaelToggledGoodReads ?? 0)
     const actual   = disables * clashes
     return { raw: actual, actual }
   }
   if (player.hasWrack) {
     const poisonDealt = player.wrackPoisonDealt ?? 0
     return { raw: poisonDealt, actual: poisonDealt }
+  }
+  if (player.hasHarrox) {
+    // RAMPAGE: FURY × 5
+    const fury = player.harroxFury ?? 0
+    return { raw: fury * 5, actual: fury * 5 }
   }
   // Cairan / default: ASSASSINATE = 2×AT + 2×SP
   const baseAt = player.baseAtDamage ?? AT_DAMAGE
@@ -338,9 +349,9 @@ function processVaelUlt(gameState, ultUser) {
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
 
-  // Damage = vaelDisablesLanded × vaelNormalGoodReads (Good Clashes); resets disables after use.
-  const disables = attacker.vaelDisablesLanded  ?? 0
-  const clashes  = attacker.vaelNormalGoodReads ?? 0
+  // Damage = vaelDisablesLanded × all good reads (toggled + non-toggled); resets disables after use.
+  const disables = attacker.vaelDisablesLanded   ?? 0
+  const clashes  = (attacker.vaelNormalGoodReads ?? 0) + (attacker.vaelToggledGoodReads ?? 0)
   const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
 
   const newDefenderHp = Math.max(0, defender.hp - actualDamage)
@@ -414,10 +425,56 @@ function processWrackUlt(gameState, ultUser) {
   }
 }
 
+function processHarroxUlt(gameState, ultUser) {
+  const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
+  const attacker = gameState[ultUser]
+  const defender = gameState[defenderKey]
+  const { raw: rawDamage, actual: actualDamage } = calcUltDamage(attacker)
+  const newDefenderHp = Math.max(0, defender.hp - actualDamage)
+  // MASSACRE bonus: if unlocked, RAMPAGE also applies 3 bleed stacks to the opponent
+  const massacreBonus = attacker.harroxMassacreUnlocked
+    ? [{ currentDamage: 1 }, { currentDamage: 1 }, { currentDamage: 1 }]
+    : []
+  const entry = {
+    turn: gameState.log.length + 1,
+    isUlt: true,
+    isHarroxUlt: true,
+    ultUser,
+    rawDamage,
+    actualDamage,
+    healAmount: 0,
+    harroxFury: attacker.harroxFury ?? 0,
+    massacreActive: !!attacker.harroxMassacreUnlocked,
+    p1Hp: ultUser === 'p1' ? attacker.hp : newDefenderHp,
+    p2Hp: ultUser === 'p2' ? attacker.hp : newDefenderHp,
+  }
+  return {
+    ...gameState,
+    [ultUser]: {
+      ...attacker,
+      ultimateReady: false,
+      cycleLit: {},
+      cycleSet: [],
+      litMoves: { at: false, bl: false, sp: false },
+      ultReadAchieved: false,
+      ultGoodReads: 0,
+      ultChainAchieved: false,
+    },
+    [defenderKey]: {
+      ...defender,
+      hp: newDefenderHp,
+      bleeds: [...(defender.bleeds ?? []), ...massacreBonus],
+    },
+    lastTurn: entry,
+    log: [...gameState.log, entry],
+  }
+}
+
 export function processUlt(gameState, ultUser) {
-  if (gameState[ultUser]?.hasMourne) return processCollapse(gameState, ultUser)
-  if (gameState[ultUser]?.hasVael)   return processVaelUlt(gameState, ultUser)
-  if (gameState[ultUser]?.hasWrack)  return processWrackUlt(gameState, ultUser)
+  if (gameState[ultUser]?.hasMourne)  return processCollapse(gameState, ultUser)
+  if (gameState[ultUser]?.hasVael)    return processVaelUlt(gameState, ultUser)
+  if (gameState[ultUser]?.hasWrack)   return processWrackUlt(gameState, ultUser)
+  if (gameState[ultUser]?.hasHarrox) return processHarroxUlt(gameState, ultUser)
   const defenderKey = ultUser === 'p1' ? 'p2' : 'p1'
   const attacker = gameState[ultUser]
   const defender = gameState[defenderKey]
@@ -654,6 +711,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const newP1 = { ...updateChains(gameState.p1, p1Move, p1ReadActive), ...updateCycle(gameState.p1, p1Move, p1ReadActive), ...p1FlowUpdate }
   const newP2 = { ...updateChains(gameState.p2, p2Move, p2ReadActive), ...updateCycle(gameState.p2, p2Move, p2ReadActive), ...p2FlowUpdate }
 
+  // ── Harrox Frenzy: AT chain minimum floor of 1 (pre-damage, uses prior state) ─
+  if (newP1.hasHarrox && newP1.harroxFrenzyUnlocked && newP1.atChain === 0) newP1.atChain = 1
+  if (newP2.hasHarrox && newP2.harroxFrenzyUnlocked && newP2.atChain === 0) newP2.atChain = 1
+
   // ── Ultimate unlock: three sticky conditions (all must be achieved) ────────
   const p1UltGoodReads     = Math.min(3, (newP1.ultGoodReads ?? 0) + (p1ReadActive && p1Read === 'good' ? 1 : 0))
   const p2UltGoodReads     = Math.min(3, (newP2.ultGoodReads ?? 0) + (p2ReadActive && p2Read === 'good' ? 1 : 0))
@@ -663,8 +724,10 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const p2UltChainAchieved = (newP2.ultChainAchieved ?? false) || newP2.atChain >= 3 || newP2.spChain >= 3
   const p1AllLit = !!(newP1.cycleLit?.AT && newP1.cycleLit?.BL && newP1.cycleLit?.SP)
   const p2AllLit = !!(newP2.cycleLit?.AT && newP2.cycleLit?.BL && newP2.cycleLit?.SP)
-  const p1UltimateReady = p1UltReadAchieved && p1UltChainAchieved && p1AllLit
-  const p2UltimateReady = p2UltReadAchieved && p2UltChainAchieved && p2AllLit
+  const p1UltimateReady = gameState.p1.ultimateReady || (p1UltReadAchieved && p1UltChainAchieved && p1AllLit)
+  const p2UltimateReady = gameState.p2.ultimateReady || (p2UltReadAchieved && p2UltChainAchieved && p2AllLit)
+  const p1UltJustReady = !gameState.p1.ultimateReady && p1UltimateReady
+  const p2UltJustReady = !gameState.p2.ultimateReady && p2UltimateReady
 
   const p1LitMoves = newP1.litMoves ?? { at: false, bl: false, sp: false }
   const p2LitMoves = newP2.litMoves ?? { at: false, bl: false, sp: false }
@@ -802,8 +865,9 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   }
 
   // ── Crit roll ─────────────────────────────────────────────────────────────
-  const p1EffCritChance = newP1.keenEyeUnlocked ? (newP1.keenEyeChance ?? 0.10) : (newP1.critChance ?? 0)
-  const p2EffCritChance = newP2.keenEyeUnlocked ? (newP2.keenEyeChance ?? 0.10) : (newP2.critChance ?? 0)
+  // Harrox Frenzy overrides crit to 8%; otherwise Cairan's Keen Eye applies if unlocked
+  const p1EffCritChance = newP1.harroxFrenzyUnlocked ? 0.08 : newP1.keenEyeUnlocked ? (newP1.keenEyeChance ?? 0.10) : (newP1.critChance ?? 0)
+  const p2EffCritChance = newP2.harroxFrenzyUnlocked ? 0.08 : newP2.keenEyeUnlocked ? (newP2.keenEyeChance ?? 0.10) : (newP2.critChance ?? 0)
 
   let p1CritHit = false
   let p2CritHit = false
@@ -828,6 +892,16 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   let p2Bleeds = newP2.bleeds
   if (newP1.bloodletterUnlocked && p1Read === 'good') p2Bleeds = [...p2Bleeds, { currentDamage: 1 }]
   if (newP2.bloodletterUnlocked && p2Read === 'good') p1Bleeds = [...p1Bleeds, { currentDamage: 1 }]
+
+  // ── Massacre (Harrox passive) ─────────────────────────────────────────────
+  // Once unlocked, any AT win (with or without a toggled Read) inflicts a bleed
+  // stack on the opponent.
+  if (newP1.hasHarrox && newP1.harroxMassacreUnlocked && turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p1') {
+    p2Bleeds = [...p2Bleeds, { currentDamage: 1 }]
+  }
+  if (newP2.hasHarrox && newP2.harroxMassacreUnlocked && turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p2') {
+    p1Bleeds = [...p1Bleeds, { currentDamage: 1 }]
+  }
 
   // ── Nimble (Cairan passive) ───────────────────────────────────────────────
   let p1NimbleTriggered = false
@@ -924,6 +998,44 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
   const p2WonWithAT = turnResult.outcome === 'AT_WINS_CLEAN' && turnResult.winner === 'p2'
   if (p1LitMoves.at && p1WonWithAT && finalP2Damage > 0 && newP1.hasDodge) p1PendingLifesteal += Math.ceil(finalP2Damage * 0.33)
   if (p2LitMoves.at && p2WonWithAT && finalP1Damage > 0 && newP2.hasDodge) p2PendingLifesteal += Math.ceil(finalP1Damage * 0.33)
+
+  // ── Harrox FURY tracking ──────────────────────────────────────────────────
+  // Increments once per turn Harrox took direct damage (after all mitigations).
+  // Each threshold permanently unlocks a passive; Iron Skin immediately bumps baseAtDamage.
+  let p1HarroxFury = newP1.harroxFury ?? 0
+  let p2HarroxFury = newP2.harroxFury ?? 0
+  const p1HarroxIronSkinWas  = newP1.harroxIronSkinUnlocked  ?? false
+  const p1HarroxFrenzyWas    = newP1.harroxFrenzyUnlocked    ?? false
+  const p1HarroxMassacreWas  = newP1.harroxMassacreUnlocked  ?? false
+  const p2HarroxIronSkinWas  = newP2.harroxIronSkinUnlocked  ?? false
+  const p2HarroxFrenzyWas    = newP2.harroxFrenzyUnlocked    ?? false
+  const p2HarroxMassacreWas  = newP2.harroxMassacreUnlocked  ?? false
+  let p1HarroxIronSkinUnlocked  = p1HarroxIronSkinWas
+  let p1HarroxFrenzyUnlocked    = p1HarroxFrenzyWas
+  let p1HarroxMassacreUnlocked  = p1HarroxMassacreWas
+  let p2HarroxIronSkinUnlocked  = p2HarroxIronSkinWas
+  let p2HarroxFrenzyUnlocked    = p2HarroxFrenzyWas
+  let p2HarroxMassacreUnlocked  = p2HarroxMassacreWas
+
+  if (newP1.hasHarrox && finalP1Damage > 0) {
+    p1HarroxFury++
+    if (!p1HarroxIronSkinUnlocked && p1HarroxFury >= 6)  { p1HarroxIronSkinUnlocked = true; newP1.baseAtDamage = (newP1.baseAtDamage ?? 0) + 3 }
+    if (!p1HarroxFrenzyUnlocked   && p1HarroxFury >= 12) p1HarroxFrenzyUnlocked = true
+    if (!p1HarroxMassacreUnlocked && p1HarroxFury >= 18) p1HarroxMassacreUnlocked = true
+  }
+  if (newP2.hasHarrox && finalP2Damage > 0) {
+    p2HarroxFury++
+    if (!p2HarroxIronSkinUnlocked && p2HarroxFury >= 6)  { p2HarroxIronSkinUnlocked = true; newP2.baseAtDamage = (newP2.baseAtDamage ?? 0) + 3 }
+    if (!p2HarroxFrenzyUnlocked   && p2HarroxFury >= 12) p2HarroxFrenzyUnlocked = true
+    if (!p2HarroxMassacreUnlocked && p2HarroxFury >= 18) p2HarroxMassacreUnlocked = true
+  }
+
+  const p1HarroxIronSkinJustUnlocked  = !p1HarroxIronSkinWas && p1HarroxIronSkinUnlocked
+  const p1HarroxFrenzyJustUnlocked    = !p1HarroxFrenzyWas   && p1HarroxFrenzyUnlocked
+  const p1HarroxMassacreJustUnlocked  = !p1HarroxMassacreWas && p1HarroxMassacreUnlocked
+  const p2HarroxIronSkinJustUnlocked  = !p2HarroxIronSkinWas && p2HarroxIronSkinUnlocked
+  const p2HarroxFrenzyJustUnlocked    = !p2HarroxFrenzyWas   && p2HarroxFrenzyUnlocked
+  const p2HarroxMassacreJustUnlocked  = !p2HarroxMassacreWas && p2HarroxMassacreUnlocked
 
   // ── HP ────────────────────────────────────────────────────────────────────
   const p1Hp = Math.max(0, newP1.hp - finalP1Damage)
@@ -1132,11 +1244,13 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       else             p1Poison += chainLen
     }
     // WITHER — track cycle completions
-    if (cycleJustCompleted) {
+    // WITHER — track toggled good reads (any move)
+    const isWitherRead = readActive && read === 'good'
+    if (isWitherRead) {
       wrackCycleTriggers++
       if (wrackCycleTriggers >= 4) witherUnlocked = true
     }
-    if (witherUnlocked && cycleJustCompleted) {
+    if (witherUnlocked && isWitherRead) {
       const atDmg = player.atDmgBuff > player.baseAtDamage ? player.atDmgBuff : player.baseAtDamage
       if (pk === 'p1') p2Poison += atDmg
       else             p1Poison += atDmg
@@ -1224,23 +1338,31 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2GodModeActivated: !p2GodModeNow && newP2.godModeState,
     p1GodModeBroken:     p1GodModeNow  && !newP1.godModeState,
     p2GodModeBroken:     p2GodModeNow  && !newP2.godModeState,
+    p1LitExtinguished: p1UltJustReady,
+    p2LitExtinguished: p2UltJustReady,
     p1NimbleTriggered,
     p2NimbleTriggered,
     p1VaelEvaded,
     p2VaelEvaded,
     p1NewUnlocks: [
       ...p1CairanUnlocks, ...p1MourneUnlocks,
-      ...(p1JinxJustUnlocked      ? ['vaelJinx']  : []),
-      ...(p1RegenJustUnlocked     ? ['vaelRegen']  : []),
-      ...(p1VaelEvadeJustUnlocked ? ['vaelEvade']  : []),
+      ...(p1JinxJustUnlocked           ? ['vaelJinx']        : []),
+      ...(p1RegenJustUnlocked          ? ['vaelRegen']        : []),
+      ...(p1VaelEvadeJustUnlocked      ? ['vaelEvade']        : []),
       ...p1WrackNewUnlocks,
+      ...(p1HarroxIronSkinJustUnlocked ? ['harroxIronSkin']  : []),
+      ...(p1HarroxFrenzyJustUnlocked   ? ['harroxFrenzy']    : []),
+      ...(p1HarroxMassacreJustUnlocked ? ['harroxMassacre']  : []),
     ],
     p2NewUnlocks: [
       ...p2CairanUnlocks, ...p2MourneUnlocks,
-      ...(p2JinxJustUnlocked      ? ['vaelJinx']  : []),
-      ...(p2RegenJustUnlocked     ? ['vaelRegen']  : []),
-      ...(p2VaelEvadeJustUnlocked ? ['vaelEvade']  : []),
+      ...(p2JinxJustUnlocked           ? ['vaelJinx']        : []),
+      ...(p2RegenJustUnlocked          ? ['vaelRegen']        : []),
+      ...(p2VaelEvadeJustUnlocked      ? ['vaelEvade']        : []),
       ...p2WrackNewUnlocks,
+      ...(p2HarroxIronSkinJustUnlocked ? ['harroxIronSkin']  : []),
+      ...(p2HarroxFrenzyJustUnlocked   ? ['harroxFrenzy']    : []),
+      ...(p2HarroxMassacreJustUnlocked ? ['harroxMassacre']  : []),
     ],
     p1MourneData,
     p2MourneData,
@@ -1254,6 +1376,14 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
     p2VaelDisabledMove: p1NewDisabledMove,
     p1RegenJustUnlocked,
     p2RegenJustUnlocked,
+    p1HarroxFury,
+    p2HarroxFury,
+    p1HarroxIronSkinJustUnlocked,
+    p2HarroxIronSkinJustUnlocked,
+    p1HarroxFrenzyJustUnlocked,
+    p2HarroxFrenzyJustUnlocked,
+    p1HarroxMassacreJustUnlocked,
+    p2HarroxMassacreJustUnlocked,
   }
 
   return {
@@ -1274,6 +1404,11 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       ultGoodReads: p1UltGoodReads,
       ultChainAchieved: p1UltChainAchieved,
       ultimateReady: p1UltimateReady,
+      harroxFury: p1HarroxFury,
+      harroxIronSkinUnlocked: p1HarroxIronSkinUnlocked,
+      harroxFrenzyUnlocked: p1HarroxFrenzyUnlocked,
+      harroxMassacreUnlocked: p1HarroxMassacreUnlocked,
+      ...(p1UltJustReady ? { litMoves: { at: false, bl: false, sp: false }, cycleLit: {} } : {}),
     },
     p2: {
       ...newP2, hp: p2Hp, bleeds: p2Bleeds, poison: p2Poison, ...dodgeP2, ...p2AbilityUpdates, ...p2MourneUpdates,
@@ -1291,6 +1426,11 @@ export function processTurn(gameState, p1Move, p2Move, p1ReadActive = false, p2R
       ultGoodReads: p2UltGoodReads,
       ultChainAchieved: p2UltChainAchieved,
       ultimateReady: p2UltimateReady,
+      harroxFury: p2HarroxFury,
+      harroxIronSkinUnlocked: p2HarroxIronSkinUnlocked,
+      harroxFrenzyUnlocked: p2HarroxFrenzyUnlocked,
+      harroxMassacreUnlocked: p2HarroxMassacreUnlocked,
+      ...(p2UltJustReady ? { litMoves: { at: false, bl: false, sp: false }, cycleLit: {} } : {}),
     },
     lastTurn: entry,
     log: [...gameState.log, entry],
