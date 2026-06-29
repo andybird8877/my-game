@@ -31,12 +31,13 @@ const PORT = process.env.PORT || 3001
 //   players: [socketId, socketId?],   // [0]=P1, [1]=P2
 //   phase:   'waiting' | 'char_select' | 'game' | 'done',
 //   chars:   [charId|null, charId|null],
+//   names:   [string|null, string|null],
 //   gameState: object | null,
 //   pendingMoves: { [socketId]: { move, readActive, useBloodletter, useUlt } }
 // }
 
 const rooms = {}
-const matchmakingQueue = [] // [socketId, ...]
+const matchmakingQueue = [] // [{ id: socketId, name: string }, ...]
 
 function roomOf(socketId) {
   return Object.entries(rooms).find(([, r]) => r.players.includes(socketId))
@@ -58,6 +59,7 @@ function broadcast(roomId) {
       roomId,
       myIndex:     idx,                        // 0 = P1, 1 = P2
       chars:        room.chars,               // [p1CharId|null, p2CharId|null]
+      playerNames:  room.names,              // [p1Name|null, p2Name|null]
       gameState:    room.gameState,
       pendingMove:  !!room.pendingMoves[sid], // has this player submitted a move?
       opponentReady: !!room.pendingMoves[room.players[1 - idx]], // has opponent submitted?
@@ -71,57 +73,60 @@ io.on('connection', (socket) => {
   console.log(`[+] ${socket.id}`)
 
   // ── Create room ────────────────────────────────────────────────────────────
-  socket.on('create_room', () => {
+  socket.on('create_room', ({ name } = {}) => {
     const roomId = randomUUID().slice(0, 8).toUpperCase()
     rooms[roomId] = {
       players:      [socket.id, null],
       phase:        'waiting',
       chars:        [null, null],
+      names:        [name ?? 'Player', null],
       gameState:    null,
       pendingMoves: {},
     }
     socket.join(roomId)
     socket.emit('room_created', { roomId })
-    console.log(`[room] ${roomId} created by ${socket.id}`)
+    console.log(`[room] ${roomId} created by ${socket.id} (${name ?? 'Player'})`)
   })
 
   // ── Quick Match ────────────────────────────────────────────────────────────
-  socket.on('find_match', () => {
+  socket.on('find_match', ({ name } = {}) => {
+    const myName = name ?? 'Player'
     // Already in a room or queue — ignore
     if (roomOf(socket.id)) return
-    if (matchmakingQueue.includes(socket.id)) return
+    if (matchmakingQueue.find(e => e.id === socket.id)) return
 
     if (matchmakingQueue.length > 0) {
-      const opponentId = matchmakingQueue.shift()
+      const opponent = matchmakingQueue.shift()
       // Pair into a new room
       const roomId = randomUUID().slice(0, 8).toUpperCase()
       rooms[roomId] = {
-        players:      [opponentId, socket.id],
+        players:      [opponent.id, socket.id],
         phase:        'char_select',
         chars:        [null, null],
+        names:        [opponent.name, myName],
         gameState:    null,
         pendingMoves: {},
       }
       socket.join(roomId)
-      const opponentSocket = io.sockets.sockets.get(opponentId)
+      const opponentSocket = io.sockets.sockets.get(opponent.id)
       if (opponentSocket) opponentSocket.join(roomId)
-      console.log(`[match] ${roomId} paired ${opponentId} vs ${socket.id}`)
+      console.log(`[match] ${roomId} paired ${opponent.id}(${opponent.name}) vs ${socket.id}(${myName})`)
       broadcast(roomId)
     } else {
-      matchmakingQueue.push(socket.id)
+      matchmakingQueue.push({ id: socket.id, name: myName })
       socket.emit('match_searching')
-      console.log(`[match] ${socket.id} queued (queue length: ${matchmakingQueue.length})`)
+      console.log(`[match] ${socket.id}(${myName}) queued (queue length: ${matchmakingQueue.length})`)
     }
   })
 
   socket.on('cancel_match', () => {
-    const idx = matchmakingQueue.indexOf(socket.id)
+    const idx = matchmakingQueue.findIndex(e => e.id === socket.id)
     if (idx !== -1) matchmakingQueue.splice(idx, 1)
     console.log(`[match] ${socket.id} cancelled search`)
   })
 
   // ── Join room ──────────────────────────────────────────────────────────────
-  socket.on('join_room', ({ roomId }) => {
+  socket.on('join_room', ({ roomId, name } = {}) => {
     const room = rooms[roomId]
     if (!room) {
       socket.emit('error', { message: 'Room not found.' })
@@ -132,9 +137,10 @@ io.on('connection', (socket) => {
       return
     }
     room.players[1] = socket.id
+    room.names[1] = name ?? 'Player'
     room.phase = 'char_select'
     socket.join(roomId)
-    console.log(`[room] ${roomId} joined by ${socket.id}`)
+    console.log(`[room] ${roomId} joined by ${socket.id} (${name ?? 'Player'})`)
     broadcast(roomId)
   })
 
@@ -261,7 +267,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`[-] ${socket.id}`)
     // Remove from matchmaking queue if waiting
-    const qi = matchmakingQueue.indexOf(socket.id)
+    const qi = matchmakingQueue.findIndex(e => e.id === socket.id)
     if (qi !== -1) matchmakingQueue.splice(qi, 1)
 
     const entry = roomOf(socket.id)

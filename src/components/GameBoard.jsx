@@ -932,13 +932,14 @@ export default function GameBoard() {
 
   // ── BGM ───────────────────────────────────────────────────────────────────
   const [bgmVolume, setBgmVolume] = useState(0.25)
+  const [bgmMuted, setBgmMuted] = useState(isTouchDevice)
   const bgmRef = useRef(null)
   const bgmStarted = useRef(false)
 
   useEffect(() => {
     const audio = new Audio('/audio/bgm-2.wav')
     audio.loop = true
-    audio.volume = bgmVolume
+    audio.volume = bgmMuted ? 0 : bgmVolume
     bgmRef.current = audio
 
     function startBgm() {
@@ -947,20 +948,23 @@ export default function GameBoard() {
       audio.play().catch(() => {})
       document.removeEventListener('click', startBgm)
       document.removeEventListener('keydown', startBgm)
+      document.removeEventListener('touchstart', startBgm)
     }
 
     document.addEventListener('click', startBgm)
     document.addEventListener('keydown', startBgm)
+    document.addEventListener('touchstart', startBgm)
 
     return () => {
       audio.pause(); audio.src = ''
       document.removeEventListener('click', startBgm)
       document.removeEventListener('keydown', startBgm)
+      document.removeEventListener('touchstart', startBgm)
     }
   }, [])
   useEffect(() => {
-    if (bgmRef.current) bgmRef.current.volume = bgmVolume
-  }, [bgmVolume])
+    if (bgmRef.current) bgmRef.current.volume = bgmMuted ? 0 : bgmVolume
+  }, [bgmVolume, bgmMuted])
 
   // ── Fight banner ──────────────────────────────────────────────────────────
   const [fightBanner, setFightBanner] = useState(false)
@@ -990,6 +994,8 @@ export default function GameBoard() {
     roomId:        null,
     myIndex:       null,         // 0=P1  1=P2
     chars:         [null, null], // charId per slot, filled as players select
+    playerName:    'Player',     // this client's display name
+    playerNames:   [null, null], // both players' names from server
     pendingMove:   false,
     opponentReady: false,
     error:         null,
@@ -1029,11 +1035,11 @@ export default function GameBoard() {
   // Trigger death effects (flip + grayscale) only after all animations finish
   const isGameOver = state ? (state.p1.hp === 0 || state.p2.hp === 0) : false
   useEffect(() => {
-    if (isGameOver && !animating && !ultAnimating && !collapseAnimating && !betweenTurns) {
+    if (isGameOver && !animating && !ultAnimating && !p2UltAnimating && !collapseAnimating && !betweenTurns) {
       setDeathEffectsReady(true)
       playSound(SFX.victory, 0.8)
     }
-  }, [isGameOver, animating, ultAnimating, collapseAnimating, betweenTurns])
+  }, [isGameOver, animating, ultAnimating, p2UltAnimating, collapseAnimating, betweenTurns])
 
   // ── Flow / Zen / GOD MODE alert banners ──────────────────────────────────
   const prevFlowLogLenRef = useRef(0)
@@ -1097,11 +1103,12 @@ export default function GameBoard() {
       setOnline(o => ({ ...o, phase: 'waiting', roomId }))
     })
 
-    socket.on('room_state', ({ phase, myIndex, chars, gameState, pendingMove, opponentReady }) => {
+    socket.on('room_state', ({ phase, myIndex, chars, playerNames, gameState, pendingMove, opponentReady }) => {
       setOnline(o => ({
         ...o, phase,
         myIndex:       myIndex       ?? o.myIndex,
         chars:         chars         ?? o.chars,
+        playerNames:   playerNames   ?? o.playerNames,
         pendingMove,
         opponentReady,
       }))
@@ -1182,7 +1189,8 @@ export default function GameBoard() {
   function handleQuickMatch() {
     setOnline(o => ({ ...o, phase: 'searching', error: null }))
     const socket = openSocket()
-    const go = () => socket.emit('find_match')
+    const name = online.playerName || 'Player'
+    const go = () => socket.emit('find_match', { name })
     if (socket.connected) go(); else socket.once('connect', go)
   }
 
@@ -1195,7 +1203,8 @@ export default function GameBoard() {
   function handleCreateRoom() {
     setOnline(o => ({ ...o, phase: 'create', error: null }))
     const socket = openSocket()
-    const go = () => socket.emit('create_room')
+    const name = online.playerName || 'Player'
+    const go = () => socket.emit('create_room', { name })
     if (socket.connected) go(); else socket.once('connect', go)
   }
 
@@ -1206,7 +1215,8 @@ export default function GameBoard() {
     if (!roomId) return
     setOnline(o => ({ ...o, phase: 'waiting', roomId, error: null }))
     const socket = openSocket()
-    const go = () => socket.emit('join_room', { roomId })
+    const name = online.playerName || 'Player'
+    const go = () => socket.emit('join_room', { roomId, name })
     if (socket.connected) go(); else socket.once('connect', go)
   }
 
@@ -1244,7 +1254,7 @@ export default function GameBoard() {
   function handleOnlineLeave() {
     socketRef.current?.disconnect(); socketRef.current = null
     setState(null); setGameMode(null)
-    setOnline({ phase: 'menu', roomId: null, myIndex: null, chars: [null, null], pendingMove: false, opponentReady: false, error: null, joinInput: '' })
+    setOnline(o => ({ phase: 'menu', roomId: null, myIndex: null, chars: [null, null], playerName: o.playerName, playerNames: [null, null], pendingMove: false, opponentReady: false, error: null, joinInput: '' }))
     setP1ReadActive(false); setAnimating(false); setDisplayedState(null)
     setUltAnimating(false); setCollapseAnimating(false); setCollapseData(null)
     setBetweenTurns(false); setActiveEffect(null); setDeathEffectsReady(false)
@@ -1299,13 +1309,23 @@ export default function GameBoard() {
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, justifyContent: 'center' }}>
               <span style={{ fontSize: 11, color: '#666', letterSpacing: 1 }}>♪</span>
-              <input
-                type="range" min="0" max="1" step="0.01"
-                value={bgmVolume}
-                onChange={e => setBgmVolume(parseFloat(e.target.value))}
-                style={{ width: 100, accentColor: '#5af', cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 11, color: '#555', width: 28, textAlign: 'left' }}>{Math.round(bgmVolume * 100)}%</span>
+              {isTouchDevice ? (
+                <button
+                  onClick={() => setBgmMuted(m => !m)}
+                  style={{ padding: '4px 14px', fontSize: 11, letterSpacing: 1, background: '#111', border: `1px solid ${bgmMuted ? '#555' : '#5af'}`, color: bgmMuted ? '#555' : '#5af', cursor: 'pointer' }}>
+                  {bgmMuted ? 'OFF' : 'ON'}
+                </button>
+              ) : (
+                <>
+                  <input
+                    type="range" min="0" max="1" step="0.01"
+                    value={bgmVolume}
+                    onChange={e => setBgmVolume(parseFloat(e.target.value))}
+                    style={{ width: 100, accentColor: '#5af', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 11, color: '#555', width: 28, textAlign: 'left' }}>{Math.round(bgmVolume * 100)}%</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1366,8 +1386,18 @@ export default function GameBoard() {
         {/* Main menu */}
         {phase === 'menu' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#888', letterSpacing: 2, marginBottom: 6 }}>YOUR NAME</div>
+              <input
+                value={online.playerName}
+                onChange={e => setOnline(o => ({ ...o, playerName: e.target.value.slice(0, 20) }))}
+                placeholder="Player"
+                maxLength={20}
+                style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #555', color: '#fff', fontFamily: 'monospace', fontSize: 14, boxSizing: 'border-box', letterSpacing: 1 }}
+              />
+            </div>
             <button onClick={() => { playMenuClick(); handleQuickMatch() }}
-              style={{ padding: '18px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer' }}>
+              style={{ padding: '18px 0', fontSize: 14, letterSpacing: 3, background: '#111', border: '1px solid #5af', color: '#5af', cursor: 'pointer', marginTop: 4 }}>
               QUICK MATCH
             </button>
             <button onClick={() => { playMenuClick(); setOnline(o => ({ ...o, phase: 'private', error: null })) }}
@@ -1703,8 +1733,8 @@ export default function GameBoard() {
     setEvadeFlashes({ p1: false, p2: false, key: 0 })
   }
 
-  const p1Name   = state.p1Character?.name ?? 'P1'
-  const p2Name   = state.p2Character?.name ?? 'P2'
+  const p1Name   = (isOnline && online.playerNames?.[0]) ? online.playerNames[0] : (state.p1Character?.name ?? 'P1')
+  const p2Name   = (isOnline && online.playerNames?.[1]) ? online.playerNames[1] : (state.p2Character?.name ?? 'P2')
   const p1Accent = AFFINITY_COLOR[state.p1Character?.affinity] ?? '#e03050'
   const p2Accent = AFFINITY_COLOR[state.p2Character?.affinity] ?? '#e03050'
   const myAccent = (isOnline && online.myIndex === 1) ? p2Accent : p1Accent
@@ -1916,7 +1946,7 @@ export default function GameBoard() {
       <div className="panels-row" style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 24 }}>
 
         {/* ── P1 ── */}
-        <div className="panel panel-p1">
+        <div className={`panel ${isOnline && online.myIndex === 1 && isMobile ? 'panel-p2' : 'panel-p1'}`}>
           {isMobile && (
             <div className="panel-stats-mobile">
               <span style={{ color: p1Accent, fontWeight: 'bold', marginRight: 4 }}>{p1Name}</span>
@@ -2027,7 +2057,7 @@ export default function GameBoard() {
               )
             })}
           </div>
-          {/* Read toggle — wide switch, below cycle-row */}
+          {/* Read toggle — wide switch, below cycle-row (P1 / offline / P1 online) */}
           {!gameOver && (() => {
             const readDisabled = animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)
             const isP1Controllable = !isOnline || online.myIndex === 0
@@ -2039,6 +2069,7 @@ export default function GameBoard() {
                 aria-checked={p1ReadActive}
                 tabIndex={0}
                 onClick={toggle}
+                onTouchStart={e => { e.preventDefault(); toggle() }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}
                 style={{
                   position: 'relative', marginTop: 6,
@@ -2048,6 +2079,7 @@ export default function GameBoard() {
                   opacity: readDisabled ? 0.45 : 1,
                   cursor: readDisabled ? 'not-allowed' : 'pointer',
                   userSelect: 'none', flexShrink: 0, boxSizing: 'border-box',
+                  touchAction: 'none',
                 }}
               >
                 {/* ON label */}
@@ -2218,7 +2250,7 @@ export default function GameBoard() {
         </div>
 
         {/* ── P2 ── */}
-        <div className="panel panel-p2" style={{ textAlign: 'right' }}>
+        <div className={`panel ${isOnline && online.myIndex === 1 && isMobile ? 'panel-p1' : 'panel-p2'}`} style={{ textAlign: 'right' }}>
           {isMobile && (
             <div className="panel-stats-mobile" style={{ textAlign: 'right' }}>
               <span style={{ color: p2Accent, fontWeight: 'bold', marginRight: 4 }}>{p2Name}</span>
@@ -2328,9 +2360,50 @@ export default function GameBoard() {
               )
             })}
           </div>
-          {/* Read indicator — passive switch showing P2's last read state */}
+          {/* Read toggle (P2 online) or passive indicator (CPU/observer) */}
           {!gameOver && (() => {
-            const p2ReadOn = lastReads.p2 !== 'none' && (animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove))
+            const isP2Controllable = isOnline && online.myIndex === 1
+            if (isP2Controllable) {
+              // Interactive toggle for P2 in online play
+              const readDisabled = animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns || (isOnline && online.pendingMove)
+              const toggle = () => { if (!readDisabled) { playMenuClick(); setP1ReadActive(r => !r) } }
+              return (
+                <div
+                  role="switch"
+                  aria-checked={p1ReadActive}
+                  tabIndex={0}
+                  onClick={toggle}
+                  onTouchStart={e => { e.preventDefault(); toggle() }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}
+                  style={{
+                    position: 'relative', marginTop: 6, marginLeft: 'auto',
+                    width: isMobile ? '100%' : 260, height: 36, borderRadius: 18,
+                    background: '#111', border: '2px solid #555',
+                    display: 'flex', alignItems: 'center',
+                    opacity: readDisabled ? 0.45 : 1,
+                    cursor: readDisabled ? 'not-allowed' : 'pointer',
+                    userSelect: 'none', flexShrink: 0, boxSizing: 'border-box',
+                    touchAction: 'none',
+                  }}
+                >
+                  <div style={{ flex: 1, textAlign: 'center', fontSize: isMobile ? 10 : 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#4f4' }}>ON</div>
+                  <div style={{ flex: 1, textAlign: 'center', fontSize: isMobile ? 10 : 12, fontWeight: 'bold', letterSpacing: '1.5px', color: '#f44' }}>OFF</div>
+                  <div style={{
+                    position: 'absolute', top: 2, left: 4,
+                    width: 'calc(50% - 6px)', height: 28, borderRadius: 14,
+                    background: '#888',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: isMobile ? 10 : 13, fontWeight: 'bold', letterSpacing: '1.5px', color: '#161616',
+                    boxShadow: '0 0 6px rgba(255,255,255,0.15)',
+                    transform: p1ReadActive ? 'translateX(calc(100% + 4px))' : 'translateX(0)',
+                    transition: 'transform 0.22s ease',
+                    pointerEvents: 'none',
+                  }}>READ</div>
+                </div>
+              )
+            }
+            // Passive indicator showing P2's last read state (offline/CPU)
+            const p2ReadOn = lastReads.p2 !== 'none' && (animating || ultAnimating || p2UltAnimating || collapseAnimating || betweenTurns)
             return (
               <div style={{
                 position: 'relative', marginTop: 6, marginLeft: 'auto',
