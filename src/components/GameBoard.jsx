@@ -314,10 +314,8 @@ function CharacterSelect({ step, p1Char, onSelect, onPreview }) {
   const [hovered, setHovered] = useState(null)
   const [splash, setSplash]   = useState(null) // char being shown, or null
 
-  // Only show named characters (those with a portrait); generic placeholders stay hidden
-  const named = CHARACTERS.filter(c => c.portrait)
-  const good  = named.filter(c => c.affinity === 'good')
-  const evil  = named.filter(c => c.affinity === 'evil')
+  // Only show named characters (those with a portrait); sorted alphabetically
+  const named = CHARACTERS.filter(c => c.portrait).slice().sort((a, b) => a.name.localeCompare(b.name))
 
   function handleCardClick(char) {
     if (splash) return
@@ -358,18 +356,11 @@ function CharacterSelect({ step, p1Char, onSelect, onPreview }) {
               transition: 'filter 0.12s',
             }}
           />
-          {/* Affinity tag */}
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             background: 'linear-gradient(transparent, rgba(0,0,0,0.75))',
             padding: '20px 8px 6px',
           }} />
-          <div style={{
-            position: 'absolute', top: 6, right: 6,
-            fontSize: 9, letterSpacing: 1, fontWeight: 'bold',
-            color: accent, background: 'rgba(0,0,0,0.65)',
-            padding: '2px 5px', borderRadius: 2,
-          }}>{char.affinity.toUpperCase()}</div>
         </div>
         {/* Info */}
         <div style={{ padding: '8px 10px' }}>
@@ -403,23 +394,9 @@ function CharacterSelect({ step, p1Char, onSelect, onPreview }) {
         </div>
       )}
 
-      {good.length > 0 && (
-        <>
-          <div style={{ marginBottom: 8, color: '#5af', fontSize: 10, letterSpacing: 2 }}>GOOD</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
-            {good.map(renderCard)}
-          </div>
-        </>
-      )}
-
-      {evil.length > 0 && (
-        <>
-          <div style={{ marginBottom: 8, color: '#f55', fontSize: 10, letterSpacing: 2 }}>EVIL</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            {evil.map(renderCard)}
-          </div>
-        </>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {named.map(renderCard)}
+      </div>
     </div>
     </>
   )
